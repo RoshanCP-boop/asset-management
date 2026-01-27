@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: asset_mgmt_db
+    environment:
+      POSTGRES_USER: asset_user
+      POSTGRES_PASSWORD: asset_pass
+      POSTGRES_DB: asset_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - asset_db_data:/var/lib/postgresql/data
+
+volumes:
+  asset_db_data:
