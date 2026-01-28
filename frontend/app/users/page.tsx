@@ -36,6 +36,7 @@ type User = {
 
 type CurrentUser = {
   id: number;
+  name: string;
   role: string;
 };
 
@@ -70,6 +71,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tempPasswordInfo, setTempPasswordInfo] = useState<string | null>(null);
@@ -539,8 +541,16 @@ export default function UsersPage() {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
+      {/* Backdrop for profile menu - closes on click anywhere */}
+      {showProfileMenu && (
+        <div 
+          className="fixed inset-0 z-[60]" 
+          onClick={() => setShowProfileMenu(false)}
+        />
+      )}
+      
       {/* Header */}
-      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 z-50 shadow-soft">
+      <header className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 shadow-soft ${showProfileMenu ? "z-[80]" : "z-50"}`}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 group">
@@ -589,31 +599,73 @@ export default function UsersPage() {
                 </svg>
                 Refresh
               </Button>
-              {/* Audit Dashboard Link - Admin and Auditor only */}
-              {(currentUser?.role === "ADMIN" || currentUser?.role === "AUDITOR") && (
-                <Link href="/audit?tab=users">
-                  <Button variant="outline" className="hover-lift active-scale">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Audit Dashboard
-                  </Button>
-                </Link>
-              )}
+              {/* User Profile Dropdown */}
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="hover-lift active-scale flex items-center gap-2"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium">
+                    {currentUser?.name?.charAt(0).toUpperCase() || "U"}
+                  </div>
+                  <span className="hidden sm:inline text-sm font-medium max-w-24 truncate">
+                    {currentUser?.name || "User"}
+                  </span>
+                  <svg className={`w-4 h-4 transition-transform ${showProfileMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </Button>
 
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  clearToken();
-                  window.location.href = "/login";
-                }}
-                className="text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Logout
-              </Button>
+                {showProfileMenu && (
+                    <div 
+                      className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-[70] animate-in fade-in slide-in-from-top-2 duration-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* User Info */}
+                      <div className="p-3 border-b border-slate-100 dark:border-slate-800">
+                        <p className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
+                          {currentUser?.name}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {currentUser?.role}
+                        </p>
+                      </div>
+
+                      <div className="py-1">
+                        {/* Audit Dashboard - Admin and Auditor only */}
+                        {(currentUser?.role === "ADMIN" || currentUser?.role === "AUDITOR") && (
+                          <Link
+                            href="/audit?tab=users"
+                            onClick={() => setShowProfileMenu(false)}
+                            className="flex items-center gap-3 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Audit Dashboard
+                          </Link>
+                        )}
+
+                        <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+
+                        {/* Logout */}
+                        <button
+                          onClick={() => {
+                            clearToken();
+                            window.location.href = "/login";
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
