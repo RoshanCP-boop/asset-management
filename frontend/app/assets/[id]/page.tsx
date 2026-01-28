@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { apiFetch, getErrorMessage } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { formatDateTime, formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,7 +32,9 @@ type Asset = {
   model?: string | null;
   serial_number?: string | null;  
   purchase_date?: string | null;
+  warranty_start?: string | null;
   warranty_end?: string | null;
+  warranty_extended_months?: number;
   renewal_date?: string | null;
   seats_total?: number | null;
   seats_used?: number | null;
@@ -39,15 +42,109 @@ type Asset = {
   condition?: string | null;
   notes?: string | null;
   assigned_to_user_id?: number | null;
+  location_id?: number | null;
+  location?: { id: number; name: string } | null;
 };
 
-function formatDate(dateStr?: string | null): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString();
+type Location = {
+  id: number;
+  name: string;
+};
+
+// Warranty extension options by category (max extension = last value in array)
+const WARRANTY_EXTENSIONS: Record<string, { value: number; label: string }[]> = {
+  LAPTOP: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+    { value: 36, label: "3 Years" },
+  ],
+  MONITOR: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+  ],
+  PHONE: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+  ],
+  TABLET: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+  ],
+  // Accessories get shorter extensions
+  MOUSE: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  KEYBOARD: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  HEADSET: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  WEBCAM: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  DOCKING_STATION: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+  ],
+  CHARGER: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  CABLE: [
+    { value: 6, label: "6 Months" },
+  ],
+  OTHER_ACCESSORY: [
+    { value: 6, label: "6 Months" },
+    { value: 12, label: "1 Year" },
+  ],
+  // Default for other categories
+  OTHER: [
+    { value: 12, label: "1 Year" },
+    { value: 24, label: "2 Years" },
+  ],
+};
+
+// Get max extension allowed for a category
+function getMaxExtension(category: string | null | undefined): number {
+  const extensions = WARRANTY_EXTENSIONS[category ?? "OTHER"] ?? WARRANTY_EXTENSIONS.OTHER;
+  return extensions[extensions.length - 1]?.value ?? 0;
 }
 
+// Get available extension options (what's left after existing extensions)
+function getAvailableExtensions(category: string | null | undefined, alreadyExtended: number): { value: number; label: string }[] {
+  const extensions = WARRANTY_EXTENSIONS[category ?? "OTHER"] ?? WARRANTY_EXTENSIONS.OTHER;
+  const maxExtension = extensions[extensions.length - 1]?.value ?? 0;
+  const remaining = maxExtension - alreadyExtended;
+  
+  if (remaining <= 0) return [];
+  
+  // Filter to only show extensions that don't exceed remaining
+  return extensions.filter(ext => ext.value <= remaining);
+}
+
+
 const STATUS_OPTIONS = ["IN_STOCK", "ASSIGNED", "IN_REPAIR", "RETIRED"];
-const CONDITION_OPTIONS = ["NEW", "GOOD", "FAIR", "DAMAGED", "UNDER_REPAIR"];
+const CONDITION_OPTIONS = ["NEW", "GOOD", "FAIR", "DAMAGED"];
+
+function getConditionBadgeColor(condition: string | null | undefined): string {
+  switch (condition) {
+    case "NEW":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+    case "GOOD":
+      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    case "FAIR":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+    case "DAMAGED":
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
+  }
+}
 
 // Accessory types for display purposes
 const ACCESSORY_TYPES = new Set([
@@ -120,8 +217,10 @@ export default function AssetDetailPage() {
   const [asset, setAsset] = useState<Asset | null>(null);
   const [events, setEvents] = useState<AssetEvent[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
 
   const [err, setErr] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [assignUserId, setAssignUserId] = useState<number | "">("");
@@ -139,6 +238,11 @@ export default function AssetDetailPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editRenewalPeriod, setEditRenewalPeriod] = useState("");
   const [editSeatsTotal, setEditSeatsTotal] = useState("");
+  const [editStartDate, setEditStartDate] = useState(""); // For software subscription start date
+  const [warrantyExtension, setWarrantyExtension] = useState<number>(0); // Months to extend warranty
+  const [editLocationId, setEditLocationId] = useState<number | "">("");
+  const [showNewLocationInput, setShowNewLocationInput] = useState(false);
+  const [newLocationName, setNewLocationName] = useState("");
 
   // Current user for role-based access
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -176,21 +280,24 @@ export default function AssetDetailPage() {
 
   async function load() {
     setErr(null);
+    setActionError(null);
     try {
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
-      const [assetData, eventsData, usersData, meData] = await Promise.all([
+      const [assetData, eventsData, usersData, meData, locationsData] = await Promise.all([
         apiFetch<Asset>(`/assets/${id}`, {}, token),
         apiFetch<AssetEvent[]>(`/assets/${id}/events`, {}, token),
         apiFetch<User[]>(`/users`, {}, token),
         apiFetch<CurrentUser>(`/auth/me`, {}, token),
+        apiFetch<Location[]>(`/locations`, {}, token),
       ]);
 
       setAsset(assetData);
       setEvents(eventsData);
       setUsers(usersData);
       setCurrentUser(meData);
+      setLocations(locationsData);
 
       // default selected user = current assigned (if any)
       if (assetData.assigned_to_user_id) {
@@ -203,10 +310,11 @@ export default function AssetDetailPage() {
 
   async function assignAsset() {
     if (!assignUserId) {
-      alert("Pick a user to assign to.");
+      setActionError("Pick a user to assign to.");
       return;
     }
 
+    setActionError(null);
     setBusy(true);
     try {
       const token = getToken();
@@ -227,7 +335,7 @@ export default function AssetDetailPage() {
       setAssignNotes("");
       await load();
     } catch (e: unknown) {
-      alert(getErrorMessage(e));
+      setActionError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -236,10 +344,11 @@ export default function AssetDetailPage() {
   async function returnAsset() {
     // For software, require selecting a user
     if (asset?.asset_type === "SOFTWARE" && !returnUserId) {
-      alert("Please select which user is returning the seat.");
+      setActionError("Please select which user is returning the seat.");
       return;
     }
 
+    setActionError(null);
     setBusy(true);
     try {
       const token = getToken();
@@ -261,7 +370,7 @@ export default function AssetDetailPage() {
       setReturnUserId("");
       await load();
     } catch (e: unknown) {
-      alert(getErrorMessage(e));
+      setActionError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -275,8 +384,13 @@ export default function AssetDetailPage() {
     setEditStatus(asset.status);
     setEditCondition(asset.condition ?? "GOOD");
     setEditNotes(asset.notes ?? "");
-    setEditRenewalPeriod(RENEWAL_PERIOD_OPTIONS[3].value); // Default to 1 year
+    setEditRenewalPeriod(""); // Default to no change
     setEditSeatsTotal(asset.seats_total?.toString() ?? "");
+    setEditStartDate(asset.purchase_date ?? "");
+    setWarrantyExtension(0); // Reset warranty extension
+    setEditLocationId(asset.location_id ?? "");
+    setShowNewLocationInput(false);
+    setNewLocationName("");
     setEditMode(true);
   }
 
@@ -285,6 +399,7 @@ export default function AssetDetailPage() {
   }
 
   async function saveAsset() {
+    setActionError(null);
     // Check if serial number is being changed
     const originalSerial = asset?.serial_number ?? "";
     const newSerial = editSerialNumber || "";
@@ -300,30 +415,67 @@ export default function AssetDetailPage() {
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
-      // Calculate new renewal date if admin is editing a software asset
-      let renewal_date: string | null | undefined = undefined;
-      if (isAdmin && asset?.asset_type === "SOFTWARE" && editRenewalPeriod) {
-        const startDate = asset.purchase_date ? new Date(asset.purchase_date) : new Date();
-        const selectedPeriod = RENEWAL_PERIOD_OPTIONS.find(p => p.value === editRenewalPeriod);
-        renewal_date = calculateRenewalDate(startDate, selectedPeriod?.months ?? 12);
+      // Build update payload
+      const updatePayload: Record<string, unknown> = {
+        manufacturer: editManufacturer || null,
+        model: editModel || null,
+        serial_number: editSerialNumber || null,
+        status: editStatus,
+        condition: editCondition,
+        notes: editNotes || null,
+      };
+
+      // Handle software subscription updates
+      if (asset?.asset_type === "SOFTWARE") {
+        updatePayload.seats_total = editSeatsTotal ? parseInt(editSeatsTotal, 10) : null;
+        
+        // Update start date if changed
+        if (editStartDate && editStartDate !== asset.purchase_date) {
+          updatePayload.purchase_date = editStartDate;
+        }
+        
+        // Only recalculate renewal date if a renewal period is explicitly selected
+        if (editRenewalPeriod) {
+          const startDate = editStartDate || asset.purchase_date;
+          const selectedPeriod = RENEWAL_PERIOD_OPTIONS.find(p => p.value === editRenewalPeriod);
+          if (startDate && selectedPeriod) {
+            updatePayload.renewal_date = calculateRenewalDate(new Date(startDate), selectedPeriod.months);
+          }
+        }
       }
+
+      // Handle hardware warranty extension
+      if (asset?.asset_type === "HARDWARE" && warrantyExtension > 0) {
+        const currentEnd = asset.warranty_end ? new Date(asset.warranty_end) : new Date();
+        const newEnd = new Date(currentEnd);
+        newEnd.setMonth(newEnd.getMonth() + warrantyExtension);
+        updatePayload.warranty_end = newEnd.toISOString().split("T")[0];
+        // Track total extension
+        updatePayload.warranty_extended_months = (asset.warranty_extended_months ?? 0) + warrantyExtension;
+      }
+
+      // Handle location - create new if needed
+      let locationId: number | null = editLocationId === "" ? null : editLocationId;
+      if (showNewLocationInput && newLocationName.trim()) {
+        const newLocation = await apiFetch<Location>(
+          "/locations",
+          {
+            method: "POST",
+            body: JSON.stringify({ name: newLocationName.trim() }),
+          },
+          token
+        );
+        locationId = newLocation.id;
+        // Add to local locations list
+        setLocations((prev) => [...prev, newLocation]);
+      }
+      updatePayload.location_id = locationId;
 
       await apiFetch(
         `/assets/${id}`,
         {
           method: "PUT",
-          body: JSON.stringify({
-            manufacturer: editManufacturer || null,
-            model: editModel || null,
-            serial_number: editSerialNumber || null,
-            status: editStatus,
-            condition: editCondition,
-            notes: editNotes || null,
-            ...(renewal_date !== undefined && { renewal_date }),
-            ...(asset?.asset_type === "SOFTWARE" && { 
-              seats_total: editSeatsTotal ? parseInt(editSeatsTotal, 10) : null 
-            }),
-          }),
+          body: JSON.stringify(updatePayload),
         },
         token
       );
@@ -331,7 +483,7 @@ export default function AssetDetailPage() {
       setEditMode(false);
       await load();
     } catch (e: unknown) {
-      alert(getErrorMessage(e));
+      setActionError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -344,9 +496,9 @@ export default function AssetDetailPage() {
 
   if (!asset) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <div className="loading-spinner" />
           <p className="text-sm text-muted-foreground">Loading asset details...</p>
         </div>
       </div>
@@ -400,6 +552,11 @@ export default function AssetDetailPage() {
       {err && (
         <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg animate-in fade-in duration-200">
           <p className="text-sm text-red-600 dark:text-red-400">{err}</p>
+        </div>
+      )}
+      {actionError && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg animate-in fade-in duration-200">
+          <p className="text-sm text-amber-700 dark:text-amber-300">{actionError}</p>
         </div>
       )}
 
@@ -456,7 +613,7 @@ export default function AssetDetailPage() {
               {asset.asset_type === "HARDWARE" ? (
                 <>
                   <p>
-                    <b>Warranty Start:</b> {formatDate(asset.purchase_date)}
+                    <b>Warranty Start:</b> {formatDate(asset.warranty_start)}
                   </p>
                   <p>
                     <b>Warranty End:</b> {formatDate(asset.warranty_end)}
@@ -488,13 +645,21 @@ export default function AssetDetailPage() {
                   : asset.status}
               </p>
               {asset.asset_type === "HARDWARE" && (
-                <p>
-                  <b>Condition:</b> {asset.condition ?? "-"}
+                <p className="flex items-center gap-2">
+                  <b>Condition:</b>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getConditionBadgeColor(asset.condition)}`}>
+                    {asset.condition?.replace(/_/g, " ") ?? "-"}
+                  </span>
                 </p>
               )}
               <p>
                 <b>Notes:</b> {asset.notes ?? "-"}
               </p>
+              {asset.asset_type === "HARDWARE" && (
+                <p>
+                  <b>Location:</b> {asset.location?.name ?? "-"}
+                </p>
+              )}
             </>
           ) : (
             <div className="space-y-3">
@@ -594,9 +759,73 @@ export default function AssetDetailPage() {
                 </div>
               )}
 
-              {/* Renewal Period - only for SOFTWARE assets and ADMIN users */}
+              {/* Location - only for HARDWARE assets */}
+              {asset.asset_type === "HARDWARE" && (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Location</label>
+                  {!showNewLocationInput ? (
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 border rounded-md px-3 py-2 bg-transparent"
+                        value={editLocationId}
+                        onChange={(e) => setEditLocationId(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                      >
+                        <option value="">No location</option>
+                        {locations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowNewLocationInput(true)}
+                        className="whitespace-nowrap"
+                      >
+                        + New
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter new location name..."
+                        value={newLocationName}
+                        onChange={(e) => setNewLocationName(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setShowNewLocationInput(false);
+                          setNewLocationName("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Software subscription editing - only for ADMIN users */}
               {asset.asset_type === "SOFTWARE" && isAdmin && (
                 <>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Start Date</label>
+                    <Input
+                      type="date"
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Current: {formatDate(asset.purchase_date)}
+                    </p>
+                  </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium">Renewal Period</label>
                     <select
@@ -604,6 +833,7 @@ export default function AssetDetailPage() {
                       value={editRenewalPeriod}
                       onChange={(e) => setEditRenewalPeriod(e.target.value)}
                     >
+                      <option value="">Keep current ({formatDate(asset.renewal_date)})</option>
                       {RENEWAL_PERIOD_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -611,7 +841,9 @@ export default function AssetDetailPage() {
                       ))}
                     </select>
                     <p className="text-xs text-muted-foreground">
-                      Renewal date will be calculated from the start date
+                      {editRenewalPeriod 
+                        ? "Renewal date will be recalculated from the start date"
+                        : "Renewal date will remain unchanged"}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -629,6 +861,56 @@ export default function AssetDetailPage() {
                   </div>
                 </>
               )}
+
+              {/* Hardware warranty extension - only for ADMIN users */}
+              {asset.asset_type === "HARDWARE" && isAdmin && (() => {
+                const alreadyExtended = asset.warranty_extended_months ?? 0;
+                const maxExtension = getMaxExtension(asset.category);
+                const availableExtensions = getAvailableExtensions(asset.category, alreadyExtended);
+                const isMaxed = availableExtensions.length === 0;
+                
+                return (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Extend Warranty</label>
+                    {isMaxed ? (
+                      <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-md border">
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Maximum warranty extension reached ({maxExtension} months)
+                        </p>
+                      </div>
+                    ) : (
+                      <select
+                        className="w-full border rounded-md px-3 py-2 bg-transparent"
+                        value={warrantyExtension}
+                        onChange={(e) => setWarrantyExtension(Number(e.target.value))}
+                      >
+                        <option value={0}>No extension</option>
+                        {availableExtensions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            + {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Current warranty ends: {formatDate(asset.warranty_end)}
+                      {alreadyExtended > 0 && (
+                        <span className="ml-1">(already extended by {alreadyExtended} months)</span>
+                      )}
+                      {warrantyExtension > 0 && (
+                        <span className="text-green-600 ml-1">
+                          → New end: {(() => {
+                            const currentEnd = asset.warranty_end ? new Date(asset.warranty_end) : new Date();
+                            const newEnd = new Date(currentEnd);
+                            newEnd.setMonth(newEnd.getMonth() + warrantyExtension);
+                            return formatDate(newEnd.toISOString());
+                          })()}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-1">
                 <label className="text-sm font-medium">Notes</label>
@@ -788,37 +1070,84 @@ export default function AssetDetailPage() {
       )}
 
       {/* Events */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Event History</CardTitle>
+      <Card className="shadow-xl border-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Event History
+            <span className="text-sm font-normal text-slate-500">({events.length})</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>From</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.map((e, index) => (
-                <TableRow key={e.id}>
-                  <TableCell>{index + 1}</TableCell>
-                  <TableCell>{e.event_type}</TableCell>
-                  <TableCell>{new Date(e.timestamp).toLocaleString()}</TableCell>
-                  <TableCell>{who(e.from_user_name, e.from_user_id)}</TableCell>
-                  <TableCell>{who(e.to_user_name, e.to_user_id)}</TableCell>
-                  <TableCell>{who(e.actor_user_name, e.actor_user_id)}</TableCell>
-                  <TableCell>{e.notes ?? "-"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="p-0">
+          {events.length === 0 ? (
+            <div className="p-6 text-center text-muted-foreground">
+              No events recorded for this asset.
+            </div>
+          ) : (
+            <div className="max-h-96 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-44">Timestamp</TableHead>
+                    <TableHead className="w-32">Event</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead className="w-32">Actor</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {events.map((e) => (
+                    <TableRow key={e.id} className="table-row-hover">
+                      <TableCell className="text-sm text-slate-600">
+                        {formatDateTime(e.timestamp)}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          e.event_type === "CREATE" ? "bg-green-100 text-green-800" :
+                          e.event_type === "ASSIGN" ? "bg-blue-100 text-blue-800" :
+                          e.event_type === "RETURN" ? "bg-amber-100 text-amber-800" :
+                          e.event_type === "MOVE" ? "bg-purple-100 text-purple-800" :
+                          e.event_type === "UPDATE" ? "bg-indigo-100 text-indigo-800" :
+                          e.event_type === "REPAIR" ? "bg-cyan-100 text-cyan-800" :
+                          e.event_type === "RETIRE" ? "bg-red-100 text-red-800" :
+                          "bg-gray-100 text-gray-800"
+                        }`}>
+                          {e.event_type.replace(/_/g, " ")}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {e.from_user_name ? (
+                          <span className="font-medium text-slate-700">{e.from_user_name}</span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {e.to_user_name ? (
+                          <span className="font-medium text-slate-700">{e.to_user_name}</span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">
+                        {e.actor_user_name || "-"}
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-500 max-w-md">
+                        {e.notes ? (
+                          <span className="whitespace-pre-wrap break-words" title={e.notes}>
+                            {e.notes}
+                          </span>
+                        ) : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
       </main>

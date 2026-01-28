@@ -68,35 +68,45 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 relative overflow-hidden">
-      {/* Animated background elements */}
+      {/* Animated mesh gradient background */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Large glowing orbs */}
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse-soft" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl animate-pulse-soft delay-700" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-3xl animate-pulse-soft delay-300" />
-        <div className="absolute top-20 left-1/4 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl animate-pulse-soft delay-500" />
-        <div className="absolute bottom-20 right-1/4 w-72 h-72 bg-teal-500/10 rounded-full blur-3xl animate-pulse-soft delay-200" />
+        {/* Morphing gradient blobs */}
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-gradient-to-br from-blue-500/30 to-cyan-500/20 blur-3xl animate-morph animate-drift" />
+        <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] bg-gradient-to-tr from-indigo-500/30 to-purple-500/20 blur-3xl animate-morph delay-500" style={{ animationDirection: 'reverse' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-cyan-500/15 to-blue-500/15 blur-3xl animate-pulse-soft delay-300" />
+        <div className="absolute top-10 left-1/4 w-80 h-80 bg-gradient-to-br from-purple-500/20 to-pink-500/10 blur-3xl animate-morph delay-700" />
+        <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-gradient-to-tl from-teal-500/15 to-emerald-500/10 blur-3xl animate-drift delay-300" style={{ animationDirection: 'reverse' }} />
         
-        {/* Floating particles - small */}
-        <div className="absolute top-[10%] left-[15%] w-2 h-2 bg-blue-400/50 rounded-full animate-float" />
-        <div className="absolute top-[20%] right-[20%] w-3 h-3 bg-indigo-400/40 rounded-full animate-float delay-200" />
-        <div className="absolute top-[35%] left-[10%] w-2 h-2 bg-cyan-400/50 rounded-full animate-float delay-500" />
-        <div className="absolute top-[15%] left-[45%] w-2 h-2 bg-purple-400/40 rounded-full animate-float delay-300" />
-        <div className="absolute top-[25%] right-[35%] w-1.5 h-1.5 bg-blue-300/50 rounded-full animate-float delay-700" />
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
         
-        {/* Floating particles - medium */}
-        <div className="absolute top-[45%] left-[8%] w-4 h-4 bg-indigo-400/25 rounded-full animate-float delay-100" />
-        <div className="absolute top-[40%] right-[12%] w-3 h-3 bg-cyan-400/30 rounded-full animate-float delay-500" />
-        <div className="absolute top-[55%] right-[25%] w-2.5 h-2.5 bg-purple-400/35 rounded-full animate-float delay-300" />
+        {/* Twinkling stars */}
+        <div className="absolute top-[8%] left-[12%] w-1 h-1 bg-white/60 rounded-full animate-twinkle" />
+        <div className="absolute top-[15%] right-[18%] w-1.5 h-1.5 bg-white/50 rounded-full animate-twinkle delay-300" />
+        <div className="absolute top-[22%] left-[28%] w-1 h-1 bg-white/70 rounded-full animate-twinkle delay-700" />
+        <div className="absolute top-[12%] left-[55%] w-1 h-1 bg-white/50 rounded-full animate-twinkle delay-500" />
+        <div className="absolute top-[30%] right-[25%] w-1 h-1 bg-white/60 rounded-full animate-twinkle delay-200" />
+        <div className="absolute top-[5%] right-[40%] w-1.5 h-1.5 bg-white/40 rounded-full animate-twinkle delay-1000" />
         
-        {/* Floating particles - bottom area */}
-        <div className="absolute bottom-[30%] left-[20%] w-2 h-2 bg-blue-400/45 rounded-full animate-float delay-150" />
-        <div className="absolute bottom-[25%] right-[15%] w-3 h-3 bg-teal-400/35 rounded-full animate-float delay-500" />
-        <div className="absolute bottom-[15%] left-[35%] w-2 h-2 bg-indigo-400/40 rounded-full animate-float delay-700" />
-        <div className="absolute bottom-[20%] right-[40%] w-1.5 h-1.5 bg-cyan-300/50 rounded-full animate-float delay-200" />
-        <div className="absolute bottom-[35%] left-[5%] w-2.5 h-2.5 bg-purple-400/30 rounded-full animate-float delay-300" />
-        <div className="absolute bottom-[10%] right-[30%] w-2 h-2 bg-blue-400/40 rounded-full animate-float delay-100" />
-        <div className="absolute bottom-[40%] right-[8%] w-3 h-3 bg-indigo-300/25 rounded-full animate-float delay-500" />
+        {/* Floating orbs with drift */}
+        <div className="absolute top-[40%] left-[5%] w-3 h-3 bg-blue-400/40 rounded-full animate-drift blur-[1px]" />
+        <div className="absolute top-[35%] right-[8%] w-4 h-4 bg-indigo-400/30 rounded-full animate-drift delay-500 blur-[1px]" />
+        <div className="absolute top-[60%] left-[15%] w-2.5 h-2.5 bg-cyan-400/35 rounded-full animate-float-rotate delay-300" />
+        <div className="absolute top-[50%] right-[20%] w-3 h-3 bg-purple-400/30 rounded-full animate-float-rotate delay-700" />
+        
+        {/* Bottom floating particles */}
+        <div className="absolute bottom-[25%] left-[22%] w-2 h-2 bg-blue-400/50 rounded-full animate-float delay-150" />
+        <div className="absolute bottom-[20%] right-[12%] w-3 h-3 bg-teal-400/40 rounded-full animate-drift delay-500" />
+        <div className="absolute bottom-[30%] left-[8%] w-2.5 h-2.5 bg-indigo-400/35 rounded-full animate-float-rotate delay-700" />
+        <div className="absolute bottom-[15%] right-[35%] w-2 h-2 bg-cyan-300/45 rounded-full animate-twinkle delay-200" />
+        <div className="absolute bottom-[35%] left-[40%] w-1.5 h-1.5 bg-purple-400/40 rounded-full animate-float delay-300" />
+        <div className="absolute bottom-[8%] left-[30%] w-2 h-2 bg-blue-400/35 rounded-full animate-drift delay-100" />
+        <div className="absolute bottom-[42%] right-[6%] w-3.5 h-3.5 bg-indigo-300/25 rounded-full animate-float-rotate delay-500" />
+        
+        {/* Additional twinkling stars at bottom */}
+        <div className="absolute bottom-[18%] left-[18%] w-1 h-1 bg-white/50 rounded-full animate-twinkle delay-300" />
+        <div className="absolute bottom-[12%] right-[22%] w-1 h-1 bg-white/60 rounded-full animate-twinkle delay-700" />
+        <div className="absolute bottom-[28%] right-[45%] w-1.5 h-1.5 bg-white/40 rounded-full animate-twinkle delay-500" />
       </div>
 
       <Card className="w-full max-w-md relative z-10 shadow-2xl border-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl animate-scale-in">

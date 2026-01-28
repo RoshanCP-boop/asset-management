@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiFetch, getErrorMessage } from "@/lib/api";
 import { getToken, clearToken } from "@/lib/auth";
 import { validatePassword, validateConfirmPassword } from "@/lib/validation";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 
 import {
@@ -35,6 +35,9 @@ type Asset = {
   status: string;
   seats_total?: number | null;
   seats_used?: number | null;
+  warranty_start?: string | null;
+  warranty_end?: string | null;
+  renewal_date?: string | null;
 };
 
 type CurrentUser = {
@@ -77,6 +80,7 @@ function getDisplayCategory(category: string | null): string {
 export default function AssetsPage() {
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +95,7 @@ export default function AssetsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
   // Role-based permissions
   const canCreateAsset = currentUser?.role === "ADMIN";
@@ -101,11 +106,141 @@ export default function AssetsPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pageRestored, setPageRestored] = useState(false);
+
+  // Restore page from sessionStorage after hydration
+  useEffect(() => {
+    const saved = sessionStorage.getItem("assetsPage");
+    if (saved) {
+      const page = parseInt(saved, 10);
+      if (page > 0) {
+        setCurrentPage(page);
+      }
+    }
+    setPageRestored(true);
+  }, []);
+
+  // Save page to sessionStorage and update state
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    sessionStorage.setItem("assetsPage", page.toString());
+  }, []);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"" | "HARDWARE" | "SOFTWARE">("");
   const [filterStatus, setFilterStatus] = useState("");
+
+  // Reminders dropdown state
+  const [showReminders, setShowReminders] = useState(false);
+
+  // Dismissed reminders (stored in localStorage)
+  const [dismissedReminders, setDismissedReminders] = useState<Set<string>>(new Set());
+
+  // Load dismissed reminders from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("dismissedReminders");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setDismissedReminders(new Set(parsed));
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  // Save dismissed reminders to localStorage
+  function dismissReminder(assetId: number, type: "warranty" | "renewal") {
+    const key = `${assetId}-${type}`;
+    const newDismissed = new Set(dismissedReminders);
+    newDismissed.add(key);
+    setDismissedReminders(newDismissed);
+    try {
+      localStorage.setItem("dismissedReminders", JSON.stringify([...newDismissed]));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  // Clear all dismissed reminders
+  function clearDismissedReminders() {
+    setDismissedReminders(new Set());
+    try {
+      localStorage.removeItem("dismissedReminders");
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  // Reminder thresholds (days)
+  const REMINDER_DAYS = 30;
+  const WARNING_DAYS = 14;
+  const URGENT_DAYS = 7;
+
+  // Calculate upcoming expirations (excluding dismissed)
+  const upcomingReminders = useMemo(() => {
+    const now = new Date();
+    const reminders: Array<{
+      asset: Asset;
+      type: "warranty" | "renewal";
+      daysLeft: number;
+      urgency: "normal" | "warning" | "urgent" | "expired";
+    }> = [];
+
+    assets.forEach((asset) => {
+      // Check hardware warranty
+      if (asset.asset_type === "HARDWARE" && asset.warranty_end && asset.status !== "RETIRED") {
+        const key = `${asset.id}-warranty`;
+        if (dismissedReminders.has(key)) return; // Skip dismissed
+        
+        const warrantyDate = new Date(asset.warranty_end);
+        const daysLeft = Math.ceil((warrantyDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysLeft <= REMINDER_DAYS) {
+          reminders.push({
+            asset,
+            type: "warranty",
+            daysLeft,
+            urgency: daysLeft <= 0 ? "expired" : daysLeft <= URGENT_DAYS ? "urgent" : daysLeft <= WARNING_DAYS ? "warning" : "normal",
+          });
+        }
+      }
+
+      // Check software renewal
+      if (asset.asset_type === "SOFTWARE" && asset.renewal_date && asset.status !== "RETIRED") {
+        const key = `${asset.id}-renewal`;
+        if (dismissedReminders.has(key)) return; // Skip dismissed
+        
+        const renewalDate = new Date(asset.renewal_date);
+        const daysLeft = Math.ceil((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysLeft <= REMINDER_DAYS) {
+          reminders.push({
+            asset,
+            type: "renewal",
+            daysLeft,
+            urgency: daysLeft <= 0 ? "expired" : daysLeft <= URGENT_DAYS ? "urgent" : daysLeft <= WARNING_DAYS ? "warning" : "normal",
+          });
+        }
+      }
+    });
+
+    // Sort by urgency (expired first, then by days left)
+    return reminders.sort((a, b) => {
+      const urgencyOrder = { expired: 0, urgent: 1, warning: 2, normal: 3 };
+      if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+        return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+      }
+      return a.daysLeft - b.daysLeft;
+    });
+  }, [assets, dismissedReminders]);
+
+  // Helper to check if an asset has an upcoming expiration
+  function getAssetReminder(asset: Asset): { urgency: string; daysLeft: number } | null {
+    const reminder = upcomingReminders.find((r) => r.asset.id === asset.id);
+    return reminder ? { urgency: reminder.urgency, daysLeft: reminder.daysLeft } : null;
+  }
 
   // Helper to get effective status (for software, computed from seats)
   function getEffectiveStatus(asset: Asset): string {
@@ -168,10 +303,26 @@ export default function AssetsPage() {
     });
   }, [filteredAssets]);
 
-  // Reset page when filters change
+  // Reset page when filters change (but not until after page is restored)
+  const prevFilters = useRef({ searchQuery, filterType, filterStatus });
+  
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, filterType, filterStatus]);
+    // Don't reset until page has been restored from sessionStorage
+    if (!pageRestored) return;
+    
+    // Check if filters actually changed
+    const filtersChanged = 
+      prevFilters.current.searchQuery !== searchQuery ||
+      prevFilters.current.filterType !== filterType ||
+      prevFilters.current.filterStatus !== filterStatus;
+    
+    if (filtersChanged) {
+      setCurrentPage(1);
+      sessionStorage.setItem("assetsPage", "1");
+    }
+    
+    prevFilters.current = { searchQuery, filterType, filterStatus };
+  }, [pageRestored, searchQuery, filterType, filterStatus]);
 
   // Paginated assets
   const totalPages = Math.ceil(sortedAssets.length / itemsPerPage);
@@ -180,10 +331,12 @@ export default function AssetsPage() {
     return sortedAssets.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedAssets, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when assets change
+  // Clamp currentPage if it exceeds totalPages after filtering
   useEffect(() => {
-    setCurrentPage(1);
-  }, [assets.length]);
+    if (totalPages > 0 && currentPage > totalPages) {
+      handlePageChange(totalPages);
+    }
+  }, [totalPages, currentPage, handlePageChange]);
 
   async function loadAssets() {
     try {
@@ -219,6 +372,7 @@ export default function AssetsPage() {
 
   async function changePassword() {
     setPasswordError(null);
+    setPasswordMessage(null);
 
     // Validate current password
     if (!currentPassword) {
@@ -257,7 +411,7 @@ export default function AssetsPage() {
         token
       );
 
-      alert("Password changed successfully!");
+      setPasswordMessage("Password changed successfully!");
       setShowPasswordForm(false);
       setCurrentPassword("");
       setNewPassword("");
@@ -277,6 +431,7 @@ export default function AssetsPage() {
     setNewPassword("");
     setConfirmPassword("");
     setPasswordError(null);
+    setPasswordMessage(null);
   }
 
   useEffect(() => {
@@ -285,8 +440,16 @@ export default function AssetsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
+      {/* Backdrop for reminders dropdown - closes on click anywhere */}
+      {showReminders && (
+        <div 
+          className="fixed inset-0 z-[60]" 
+          onClick={() => setShowReminders(false)}
+        />
+      )}
+      
       {/* Header */}
-      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 z-50 shadow-soft">
+      <header className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/50 sticky top-0 shadow-soft ${showReminders ? "z-[80]" : "z-50"}`}>
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 group">
@@ -334,6 +497,126 @@ export default function AssetsPage() {
                 Refresh
               </Button>
 
+              {/* Reminders Bell Icon */}
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowReminders(!showReminders)}
+                  className={`hover-lift active-scale relative ${upcomingReminders.some(r => r.urgency === "expired" || r.urgency === "urgent") ? "border-orange-300" : ""}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {upcomingReminders.length > 0 && (
+                    <span className={`absolute -top-1 -right-1 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center shadow-lg ${
+                      upcomingReminders.some(r => r.urgency === "expired") 
+                        ? "bg-gradient-to-r from-red-500 to-rose-500 animate-pulse shadow-red-500/30" 
+                        : upcomingReminders.some(r => r.urgency === "urgent")
+                        ? "bg-gradient-to-r from-orange-500 to-amber-500 animate-pulse-soft shadow-orange-500/30"
+                        : "bg-gradient-to-r from-amber-400 to-yellow-500 shadow-amber-500/30"
+                    }`}>
+                      {upcomingReminders.length}
+                    </span>
+                  )}
+                </Button>
+
+                {/* Reminders Dropdown */}
+                {showReminders && (
+                    <div 
+                      className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-[70] animate-in fade-in slide-in-from-top-2 duration-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <h3 className="font-semibold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Reminders
+                        </h3>
+                        {dismissedReminders.size > 0 && (
+                          <button
+                            onClick={clearDismissedReminders}
+                            className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 transition-colors"
+                          >
+                            Restore {dismissedReminders.size} dismissed
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {upcomingReminders.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <svg className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">No upcoming expirations</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {upcomingReminders.map((reminder) => (
+                              <div
+                                key={`${reminder.asset.id}-${reminder.type}`}
+                                className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center gap-3"
+                              >
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  reminder.urgency === "expired" ? "bg-red-500 animate-pulse" :
+                                  reminder.urgency === "urgent" ? "bg-orange-500 animate-pulse" :
+                                  reminder.urgency === "warning" ? "bg-amber-500" : "bg-yellow-400"
+                                }`} />
+                                <Link 
+                                  href={`/assets/${reminder.asset.id}`}
+                                  className="flex-1 min-w-0"
+                                  onClick={() => setShowReminders(false)}
+                                >
+                                  <p className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate">
+                                    {reminder.asset.asset_tag}
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                    {reminder.type === "warranty" ? "Warranty" : "Renewal"} • {reminder.asset.model ?? reminder.asset.subscription ?? "N/A"}
+                                  </p>
+                                </Link>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <span className={`text-xs font-medium ${
+                                    reminder.urgency === "expired" ? "text-red-600 dark:text-red-400" :
+                                    reminder.urgency === "urgent" ? "text-orange-600 dark:text-orange-400" :
+                                    reminder.urgency === "warning" ? "text-amber-600 dark:text-amber-400" : "text-yellow-600 dark:text-yellow-400"
+                                  }`}>
+                                    {reminder.daysLeft <= 0 ? "Expired" : `${reminder.daysLeft}d`}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      dismissReminder(reminder.asset.id, reminder.type);
+                                    }}
+                                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                    title="Dismiss"
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                )}
+              </div>
+
+              {/* Audit Dashboard - Admin and Auditor only */}
+              {(currentUser?.role === "ADMIN" || currentUser?.role === "AUDITOR") && (
+                <Link href="/audit?tab=assets">
+                  <Button variant="outline" className="hover-lift">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Audit
+                  </Button>
+                </Link>
+              )}
+
               {mustChangePassword && (
                 <Button variant="outline" onClick={() => setShowPasswordForm(true)} className="border-orange-300 text-orange-600 hover:bg-orange-50 animate-pulse-soft hover-lift">
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -362,7 +645,7 @@ export default function AssetsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6">
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-4">
       <Card className="shadow-xl border-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800">
           <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -386,6 +669,9 @@ export default function AssetsPage() {
               <CardContent className="space-y-3">
                 {passwordError && (
                   <p className="text-sm text-red-600">{passwordError}</p>
+                )}
+                {passwordMessage && (
+                  <p className="text-sm text-emerald-600">{passwordMessage}</p>
                 )}
                 {/* Hidden username field for browser password manager */}
                 <input
@@ -483,7 +769,37 @@ export default function AssetsPage() {
             )}
           </div>
 
-          {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {loading && (
+            <div className="space-y-2 animate-fade-in">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="loading-spinner" />
+                <span className="text-sm text-muted-foreground">Loading assets...</span>
+              </div>
+              {/* Skeleton table rows */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-slate-50 px-4 py-3 border-b">
+                  <div className="flex gap-4">
+                    <div className="skeleton-text w-8" />
+                    <div className="skeleton-text w-24" />
+                    <div className="skeleton-text w-20" />
+                    <div className="skeleton-text w-24" />
+                    <div className="skeleton-text w-28" />
+                    <div className="skeleton-text w-20" />
+                  </div>
+                </div>
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="skeleton-row" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="skeleton-cell w-8" />
+                    <div className="skeleton-cell w-28" />
+                    <div className="skeleton-cell w-20" />
+                    <div className="skeleton-cell w-24" />
+                    <div className="skeleton-cell w-32" />
+                    <div className="skeleton-cell w-20" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           {!loading && !error && (
@@ -504,12 +820,37 @@ export default function AssetsPage() {
                   <TableRow key={asset.id} className="table-row-hover transition-all">
                     <TableCell className="font-medium text-slate-500">{(currentPage - 1) * itemsPerPage + index + 1}</TableCell>
                     <TableCell>
-                      <Link
-                        href={`/assets/${asset.id}`}
-                        className="underline"
-                      >
-                        {asset.asset_tag}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/assets/${asset.id}`}
+                          className="underline"
+                        >
+                          {asset.asset_tag}
+                        </Link>
+                        {(() => {
+                          const reminder = getAssetReminder(asset);
+                          if (!reminder) return null;
+                          return (
+                            <span 
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                reminder.urgency === "expired" 
+                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
+                                  : reminder.urgency === "urgent"
+                                  ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                                  : reminder.urgency === "warning"
+                                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                  : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              }`}
+                              title={reminder.daysLeft <= 0 ? "Expired" : `${reminder.daysLeft} days until expiration`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {reminder.daysLeft <= 0 ? "!" : reminder.daysLeft + "d"}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>{asset.asset_type}</TableCell>
                     <TableCell>
@@ -571,7 +912,7 @@ export default function AssetsPage() {
                     value={itemsPerPage}
                     onChange={(e) => {
                       setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
+                      handlePageChange(1);
                     }}
                   >
                     <option value={10}>10</option>
@@ -582,7 +923,7 @@ export default function AssetsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
                   >
                     Previous
@@ -593,7 +934,7 @@ export default function AssetsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
                   >
                     Next

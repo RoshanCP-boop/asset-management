@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.auth import authenticate_user, create_access_token, get_current_user, verify_password, hash_password
-from app import schemas
-from app.models import User
+from app import schemas, crud
+from app.models import User, UserEventType
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,6 +47,18 @@ def change_password(
     # Update password and clear the must_change_password flag
     current_user.password_hash = hash_password(payload.new_password)
     current_user.must_change_password = False
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update password")
+    
+    # Log the password change event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.PASSWORD_CHANGED,
+        target_user_id=current_user.id,
+        actor_user_id=current_user.id,
+    )
     
     return {"message": "Password changed successfully"}

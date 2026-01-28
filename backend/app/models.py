@@ -1,5 +1,10 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from enum import Enum
+
+
+def utcnow() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 from sqlalchemy import (
     String, Integer, Boolean, Date, DateTime, Text, ForeignKey, Enum as SAEnum
@@ -26,7 +31,6 @@ class AssetCondition(str, Enum):
     GOOD = "GOOD"
     FAIR = "FAIR"
     DAMAGED = "DAMAGED"
-    UNDER_REPAIR = "UNDER_REPAIR"
 
 
 class Location(Base):
@@ -75,7 +79,9 @@ class Asset(Base):
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Hardware warranty
+    warranty_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     warranty_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    warranty_extended_months: Mapped[int] = mapped_column(Integer, default=0)  # Total months extended
 
     # Software renewal
     renewal_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -88,12 +94,16 @@ class Asset(Base):
     owner_org: Mapped[str] = mapped_column(String(200), default="Docket")
 
     location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
-    assigned_to_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_to_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     location = relationship("Location", back_populates="assets")
     assigned_to = relationship("User", back_populates="assigned_assets")
@@ -102,6 +112,7 @@ class Asset(Base):
 
 
 class AssetEventType(str, Enum):
+    CREATE = "CREATE"
     ASSIGN = "ASSIGN"
     RETURN = "RETURN"
     MOVE = "MOVE"
@@ -128,7 +139,7 @@ class AssetEvent(Base):
         index=True
     )
 
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     asset = relationship("Asset", back_populates="events")
@@ -162,8 +173,49 @@ class UserRequest(Base):
         index=True
     )
     
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     
     requester = relationship("User", foreign_keys=[requester_id])
     target_admin = relationship("User", foreign_keys=[target_admin_id])
+
+
+class UserEventType(str, Enum):
+    USER_CREATED = "USER_CREATED"
+    USER_DEACTIVATED = "USER_DEACTIVATED"
+    USER_REACTIVATED = "USER_REACTIVATED"
+    ROLE_CHANGED = "ROLE_CHANGED"
+    REQUEST_CREATED = "REQUEST_CREATED"
+    REQUEST_APPROVED = "REQUEST_APPROVED"
+    REQUEST_DENIED = "REQUEST_DENIED"
+    PASSWORD_CHANGED = "PASSWORD_CHANGED"
+
+
+class UserEvent(Base):
+    """Audit log for user-related actions."""
+    __tablename__ = "user_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    
+    event_type: Mapped[UserEventType] = mapped_column(
+        SAEnum(UserEventType, name="usereventtype"),
+        index=True
+    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    
+    # The user this event is about (can be null for request events)
+    target_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    
+    # Who performed the action
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    
+    # For tracking changes
+    old_value: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    new_value: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    
+    # Additional context
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Relationships
+    target_user = relationship("User", foreign_keys=[target_user_id])
+    actor_user = relationship("User", foreign_keys=[actor_user_id])

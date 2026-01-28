@@ -1,5 +1,6 @@
 import os
-from datetime import datetime, timedelta
+import warnings
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import jwt, JWTError
@@ -11,7 +12,13 @@ from fastapi.security import OAuth2PasswordBearer
 from app.db import get_db
 from app.models import User, UserRole
 
-SECRET_KEY = os.getenv("JWT_SECRET", "dev-secret-change-me")
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    SECRET_KEY = "dev-secret-change-me"
+    warnings.warn(
+        "JWT_SECRET not set! Using insecure default. Set JWT_SECRET in production.",
+        UserWarning,
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours
 
@@ -28,7 +35,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None):
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode = {"sub": subject, "exp": expire}
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, case, and_
 
 from app.db import get_db
 from app import schemas, crud
 
 from app.auth import require_roles, get_current_user
-from app.models import UserRole, User, Asset, AssetEvent, AssetType, AssetEventType
+from app.models import UserRole, User, Asset, AssetEvent, AssetType, AssetEventType, UserEventType
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -16,11 +16,26 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.post(
     "",
     response_model=schemas.UserRead,
-    dependencies=[Depends(require_roles(UserRole.ADMIN))],
 )
-def create_user(payload: schemas.UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    payload: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
     try:
-        return crud.create_user(db, payload)
+        new_user = crud.create_user(db, payload)
+        
+        # Log the event
+        crud.add_user_event(
+            db,
+            event_type=UserEventType.USER_CREATED,
+            target_user_id=new_user.id,
+            actor_user_id=current_user.id,
+            new_value=payload.role.value,
+            notes=f"Created user: {payload.email}",
+        )
+        
+        return new_user
     except IntegrityError as e:
         db.rollback()
         if "ix_users_email" in str(e) or "email" in str(e).lower():
@@ -70,30 +85,43 @@ def get_user_assets(user_id: int, db: Session = Depends(get_db)):
     
     # Get software assets where user currently has a seat
     # A user has a seat if: count(ASSIGN to user) > count(RETURN from user) for that asset
-    software_assets = []
-    all_software = db.scalars(select(Asset).where(Asset.asset_type == AssetType.SOFTWARE)).all()
-    
-    for asset in all_software:
-        # Count assigns to this user for this asset
-        assigns = db.scalar(
-            select(func.count()).select_from(AssetEvent).where(
-                AssetEvent.asset_id == asset.id,
-                AssetEvent.event_type == AssetEventType.ASSIGN,
-                AssetEvent.to_user_id == user_id
-            )
-        ) or 0
-        
-        # Count returns from this user for this asset
-        returns = db.scalar(
-            select(func.count()).select_from(AssetEvent).where(
-                AssetEvent.asset_id == asset.id,
-                AssetEvent.event_type == AssetEventType.RETURN,
-                AssetEvent.from_user_id == user_id
-            )
-        ) or 0
-        
-        if assigns > returns:
-            software_assets.append(asset)
+    assign_count = func.sum(
+        case(
+            (
+                and_(
+                    AssetEvent.event_type == AssetEventType.ASSIGN,
+                    AssetEvent.to_user_id == user_id,
+                ),
+                1,
+            ),
+            else_=0,
+        )
+    )
+    return_count = func.sum(
+        case(
+            (
+                and_(
+                    AssetEvent.event_type == AssetEventType.RETURN,
+                    AssetEvent.from_user_id == user_id,
+                ),
+                1,
+            ),
+            else_=0,
+        )
+    )
+
+    software_asset_ids = (
+        select(AssetEvent.asset_id)
+        .join(Asset, AssetEvent.asset_id == Asset.id)
+        .where(Asset.asset_type == AssetType.SOFTWARE)
+        .where(or_(AssetEvent.to_user_id == user_id, AssetEvent.from_user_id == user_id))
+        .group_by(AssetEvent.asset_id)
+        .having(assign_count > return_count)
+    )
+
+    software_assets = list(
+        db.scalars(select(Asset).where(Asset.id.in_(software_asset_ids))).all()
+    )
     
     return hardware_assets + software_assets
 
@@ -218,6 +246,15 @@ def deactivate_user(
 
     user.is_active = False
     db.commit()
+    
+    # Log the deactivation event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.USER_DEACTIVATED,
+        target_user_id=user.id,
+        actor_user_id=current_user.id,
+        notes=f"Deactivated user. Returned assets: {', '.join(returned_assets) if returned_assets else 'None'}",
+    )
 
     return {
         "message": f"User {user.email} deactivated",
@@ -244,6 +281,14 @@ def activate_user(
 
     user.is_active = True
     db.commit()
+    
+    # Log the reactivation event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.USER_REACTIVATED,
+        target_user_id=user.id,
+        actor_user_id=current_user.id,
+    )
 
     return {
         "message": f"User {user.email} activated",
@@ -285,5 +330,29 @@ def change_user_role(
     user.role = UserRole(new_role)
     db.commit()
     db.refresh(user)
+    
+    # Log the role change event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.ROLE_CHANGED,
+        target_user_id=user.id,
+        actor_user_id=current_user.id,
+        old_value=old_role,
+        new_value=new_role,
+        notes=f"Changed role from {old_role} to {new_role}",
+    )
 
     return user
+
+
+@router.get(
+    "/events/audit-log",
+    response_model=list[schemas.UserEventRead],
+)
+def get_user_events(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.AUDITOR)),
+):
+    """Get user activity audit log. Admin and Auditor only."""
+    return crud.list_user_events(db, limit=limit)

@@ -63,7 +63,9 @@ class AssetCreate(BaseModel):
     serial_number: Optional[str] = None
 
     purchase_date: Optional[date] = None
+    warranty_start: Optional[date] = None
     warranty_end: Optional[date] = None
+    warranty_extended_months: int = 0
     renewal_date: Optional[date] = None
 
     seats_total: Optional[int] = Field(default=None, ge=0)
@@ -105,7 +107,9 @@ class AssetUpdate(BaseModel):
     serial_number: Optional[str] = None
 
     purchase_date: Optional[date] = None
+    warranty_start: Optional[date] = None
     warranty_end: Optional[date] = None
+    warranty_extended_months: Optional[int] = None
     renewal_date: Optional[date] = None
 
     seats_total: Optional[int] = Field(default=None, ge=0)
@@ -133,7 +137,9 @@ class AssetRead(APIModel):
     serial_number: Optional[str]
 
     purchase_date: Optional[date]
+    warranty_start: Optional[date]
     warranty_end: Optional[date]
+    warranty_extended_months: int
     renewal_date: Optional[date]
 
     seats_total: Optional[int]
@@ -144,6 +150,7 @@ class AssetRead(APIModel):
 
     owner_org: str
     location_id: Optional[int]
+    location: Optional[LocationRead] = None
     assigned_to_user_id: Optional[int]
 
     notes: Optional[str]
@@ -165,6 +172,43 @@ class AssetEventRead(APIModel):
     from_user_name: str | None = None
     to_user_name: str | None = None
     actor_user_name: str | None = None
+
+
+class AssetEventAuditRead(APIModel):
+    """Asset event with asset_tag included for audit purposes."""
+    id: int
+    asset_id: int
+    asset_tag: str
+    event_type: str
+    from_user_id: int | None = None
+    to_user_id: int | None = None
+    from_location_id: int | None = None
+    to_location_id: int | None = None
+    actor_user_id: int | None = None
+    timestamp: datetime
+    notes: str | None = None
+
+    from_user_name: str | None = None
+    to_user_name: str | None = None
+    actor_user_name: str | None = None
+
+
+# ---- Audit Dashboard ----
+class AuditSummary(APIModel):
+    """Summary statistics for audit dashboard."""
+    total_users: int
+    active_users: int
+    inactive_users: int
+    total_assets: int
+    hardware_count: int
+    software_count: int
+    assigned_assets: int
+    in_stock_assets: int
+    retired_assets: int
+    user_events_today: int
+    user_events_week: int
+    asset_events_today: int
+    asset_events_week: int
 
 
 
@@ -203,6 +247,22 @@ class UserRequestRead(APIModel):
     requester_email: str | None = None
 
 
+# ---- User Events (audit log) ----
+class UserEventRead(APIModel):
+    id: int
+    event_type: str
+    timestamp: datetime
+    target_user_id: int | None = None
+    actor_user_id: int | None = None
+    old_value: str | None = None
+    new_value: str | None = None
+    notes: str | None = None
+    
+    # Resolved names for display
+    target_user_name: str | None = None
+    actor_user_name: str | None = None
+
+
 # Pydantic v2: resolve forward refs / circular refs
 AssetDetailRead.model_rebuild()
 AssetRead.model_rebuild()
@@ -210,4 +270,5 @@ AssetEventRead.model_rebuild()
 UserRead.model_rebuild()
 LocationRead.model_rebuild()
 UserRequestRead.model_rebuild()
+UserEventRead.model_rebuild()
 

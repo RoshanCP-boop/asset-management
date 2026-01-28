@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, getErrorMessage } from "@/lib/api";
 import { getToken, clearToken } from "@/lib/auth";
+import { formatDate } from "@/lib/date";
 import { validateEmail, validatePassword, validateName } from "@/lib/validation";
 
 import {
@@ -63,11 +64,15 @@ const ROLE_PRIORITY: Record<string, number> = {
 
 export default function UsersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [tempPasswordInfo, setTempPasswordInfo] = useState<string | null>(null);
 
   // Create user form state
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -104,6 +109,25 @@ export default function UsersPage() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pageRestored, setPageRestored] = useState(false);
+
+  // Restore page from sessionStorage after hydration
+  useEffect(() => {
+    const saved = sessionStorage.getItem("usersPage");
+    if (saved) {
+      const page = parseInt(saved, 10);
+      if (page > 0) {
+        setCurrentPage(page);
+      }
+    }
+    setPageRestored(true);
+  }, []);
+
+  // Save page to sessionStorage and update state
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    sessionStorage.setItem("usersPage", page.toString());
+  }, []);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -157,10 +181,33 @@ export default function UsersPage() {
     return sortedUsers.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedUsers, currentPage, itemsPerPage]);
 
-  // Reset to page 1 when users or filters change
+  // Reset page when filters change (but not until after page is restored)
+  const prevFilters = useRef({ searchQuery, filterRole, filterStatus });
+  
   useEffect(() => {
-    setCurrentPage(1);
-  }, [users.length, searchQuery, filterRole, filterStatus]);
+    // Don't reset until page has been restored from sessionStorage
+    if (!pageRestored) return;
+    
+    // Check if filters actually changed
+    const filtersChanged = 
+      prevFilters.current.searchQuery !== searchQuery ||
+      prevFilters.current.filterRole !== filterRole ||
+      prevFilters.current.filterStatus !== filterStatus;
+    
+    if (filtersChanged) {
+      setCurrentPage(1);
+      sessionStorage.setItem("usersPage", "1");
+    }
+    
+    prevFilters.current = { searchQuery, filterRole, filterStatus };
+  }, [pageRestored, searchQuery, filterRole, filterStatus]);
+
+  // Clamp currentPage if it exceeds totalPages
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      handlePageChange(totalPages);
+    }
+  }, [totalPages, currentPage, handlePageChange]);
 
   async function loadUsers() {
     try {
@@ -204,6 +251,9 @@ export default function UsersPage() {
     if (!window.confirm(message)) return;
 
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
@@ -219,12 +269,16 @@ export default function UsersPage() {
       
       // Show which assets were returned
       if (result.returned_assets && result.returned_assets.length > 0) {
-        alert(`User deactivated.\n\nReturned assets:\n${result.returned_assets.join("\n")}`);
+        setActionMessage(
+          `User deactivated. Returned assets: ${result.returned_assets.join(", ")}`
+        );
+      } else {
+        setActionMessage("User deactivated.");
       }
       
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -233,13 +287,16 @@ export default function UsersPage() {
     if (!window.confirm(message)) return;
 
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
       await apiFetch(`/users/${userId}/activate`, { method: "POST" }, token);
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -250,6 +307,9 @@ export default function UsersPage() {
     if (!window.confirm(message)) return;
 
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
@@ -260,7 +320,7 @@ export default function UsersPage() {
       );
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -330,16 +390,19 @@ export default function UsersPage() {
 
   async function submitRequest() {
     if (!requestName.trim() || !requestEmail.trim()) {
-      alert("Please fill in name and email");
+      setActionError("Please fill in name and email");
       return;
     }
     if (!requestAdminId) {
-      alert("Please select an admin to send the request to");
+      setActionError("Please select an admin to send the request to");
       return;
     }
     
     setSubmittingRequest(true);
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
@@ -373,7 +436,7 @@ export default function UsersPage() {
       
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     } finally {
       setSubmittingRequest(false);
     }
@@ -391,6 +454,9 @@ export default function UsersPage() {
     if (!window.confirm(`Approve request for "${requestedName}"? This will create the user.`)) return;
     
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
@@ -400,15 +466,13 @@ export default function UsersPage() {
       }>(`/user-requests/${requestId}/approve`, { method: "POST" }, token);
       
       // Show the temporary password to the admin
-      alert(
-        `User "${requestedName}" created successfully!\n\n` +
-        `Temporary Password: ${result.temporary_password}\n\n` +
-        `Please share this password with the user. They should change it after first login.`
+      setTempPasswordInfo(
+        `User "${requestedName}" created successfully. Temporary password: ${result.temporary_password}`
       );
       
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -416,13 +480,16 @@ export default function UsersPage() {
     if (!window.confirm(`Deny request for "${requestedName}"?`)) return;
     
     try {
+      setActionError(null);
+      setActionMessage(null);
+      setTempPasswordInfo(null);
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
       await apiFetch(`/user-requests/${requestId}/deny`, { method: "POST" }, token);
       await loadUsers();
     } catch (err: unknown) {
-      alert(getErrorMessage(err));
+      setActionError(getErrorMessage(err));
     }
   }
 
@@ -522,13 +589,25 @@ export default function UsersPage() {
                 </svg>
                 Refresh
               </Button>
+              {/* Audit Dashboard Link - Admin and Auditor only */}
+              {(currentUser?.role === "ADMIN" || currentUser?.role === "AUDITOR") && (
+                <Link href="/audit?tab=users">
+                  <Button variant="outline" className="hover-lift active-scale">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Audit Dashboard
+                  </Button>
+                </Link>
+              )}
+
               <Button
                 variant="ghost"
                 onClick={() => {
                   clearToken();
                   window.location.href = "/login";
                 }}
-                className="text-slate-600 hover:text-red-600 hover:bg-red-50/80 transition-all hover-lift"
+                className="text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -542,6 +621,21 @@ export default function UsersPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-4">
+      {actionError && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700">{actionError}</p>
+        </div>
+      )}
+      {actionMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-sm text-emerald-700">{actionMessage}</p>
+        </div>
+      )}
+      {tempPasswordInfo && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-700">{tempPasswordInfo}</p>
+        </div>
+      )}
       <Card className="shadow-xl border-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800">
           <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
@@ -734,7 +828,7 @@ export default function UsersPage() {
                             {req.requester_name ?? `User #${req.requester_id}`}
                           </TableCell>
                           <TableCell>
-                            {new Date(req.created_at).toLocaleDateString()}
+                            {formatDate(req.created_at)}
                           </TableCell>
                           <TableCell className="space-x-2">
                             <Button
@@ -801,6 +895,36 @@ export default function UsersPage() {
               </Button>
             )}
           </div>
+
+          {loading && (
+            <div className="space-y-2 animate-fade-in">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="loading-spinner" />
+                <span className="text-sm text-muted-foreground">Loading users...</span>
+              </div>
+              {/* Skeleton table rows */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-slate-50 px-4 py-3 border-b">
+                  <div className="flex gap-4">
+                    <div className="skeleton-text w-8" />
+                    <div className="skeleton-text w-28" />
+                    <div className="skeleton-text w-40" />
+                    <div className="skeleton-text w-20" />
+                    <div className="skeleton-text w-20" />
+                  </div>
+                </div>
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="skeleton-row" style={{ animationDelay: `${i * 100}ms` }}>
+                    <div className="skeleton-cell w-8" />
+                    <div className="skeleton-cell w-32" />
+                    <div className="skeleton-cell w-44" />
+                    <div className="skeleton-cell w-20" />
+                    <div className="skeleton-cell w-20" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -914,7 +1038,7 @@ export default function UsersPage() {
                     value={itemsPerPage}
                     onChange={(e) => {
                       setItemsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
+                      handlePageChange(1);
                     }}
                   >
                     <option value={10}>10</option>
@@ -925,7 +1049,7 @@ export default function UsersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
                   >
                     Previous
@@ -936,7 +1060,7 @@ export default function UsersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
                   >
                     Next
@@ -948,6 +1072,7 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+
       </main>
     </div>
   );

@@ -18,20 +18,28 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 def create_asset(
     payload: schemas.AssetCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    if payload is None:
-        raise HTTPException(status_code=400, detail="Missing request body")
-
-    return crud.create_asset(db, payload, actor_user_id=current_user.id)
+    try:
+        return crud.create_asset(db, payload, actor_user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 @router.get("", response_model=list[schemas.AssetRead])
 def list_assets(
     db: Session = Depends(get_db),
     status: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
 ):
-    return crud.list_assets(db, status=status, current_user=current_user)
+    return crud.list_assets(
+        db,
+        status=status,
+        current_user=current_user,
+        limit=limit,
+        offset=offset,
+    )
 
 
 
@@ -54,11 +62,18 @@ def get_asset(asset_id: int, db: Session = Depends(get_db), current_user: User =
     response_model=schemas.AssetRead,
     dependencies=[Depends(require_roles(UserRole.ADMIN))],
 )
-def update_asset(asset_id: int, payload: schemas.AssetUpdate, db: Session = Depends(get_db)):
+def update_asset(
+    asset_id: int,
+    payload: schemas.AssetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     asset = crud.get_asset(db, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    return crud.update_asset(db, asset, payload)
+    if payload.asset_type and payload.asset_type != asset.asset_type:
+        raise HTTPException(status_code=400, detail="Asset type cannot be changed")
+    return crud.update_asset(db, asset, payload, actor_user_id=current_user.id)
 
 
 class AssignRequest(schemas.APIModel):

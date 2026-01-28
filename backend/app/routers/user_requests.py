@@ -1,15 +1,15 @@
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 
 from app.db import get_db
-from app import schemas, models
+from app import schemas, models, crud
 from app.auth import require_roles, get_current_user, hash_password
-from app.models import UserRole, User, UserRequest, UserRequestStatus
+from app.models import UserRole, User, UserRequest, UserRequestStatus, UserEventType
 
 
 def generate_temp_password(length: int = 12) -> str:
@@ -47,6 +47,14 @@ def create_user_request(
     db.add(request)
     db.commit()
     db.refresh(request)
+    
+    # Log the request creation event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.REQUEST_CREATED,
+        actor_user_id=current_user.id,
+        notes=f"Manager {current_user.name} requested new user: {payload.requested_email} (role: {payload.requested_role.value}) - assigned to admin ID {payload.target_admin_id}",
+    )
     
     return _enrich_request(request, db)
 
@@ -136,8 +144,30 @@ def approve_request(
     
     # Mark request as approved
     request.status = UserRequestStatus.APPROVED
-    request.resolved_at = datetime.utcnow()
+    request.resolved_at = datetime.now(timezone.utc)
     db.commit()
+    
+    # Get requester name for logging
+    requester = db.get(User, request.requester_id)
+    requester_name = requester.name if requester else f"User ID {request.requester_id}"
+    
+    # Log the user creation event (via request approval)
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.USER_CREATED,
+        target_user_id=new_user.id,
+        actor_user_id=current_user.id,
+        new_value=request.requested_role.value,
+        notes=f"Created via request from {requester_name}",
+    )
+    
+    # Log the request approval event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.REQUEST_APPROVED,
+        actor_user_id=current_user.id,
+        notes=f"Approved request from {requester_name} for {request.requested_email}",
+    )
     
     return {
         "message": f"User {request.requested_name} created successfully",
@@ -167,8 +197,20 @@ def deny_request(
         raise HTTPException(status_code=400, detail="Request is not pending")
     
     request.status = UserRequestStatus.DENIED
-    request.resolved_at = datetime.utcnow()
+    request.resolved_at = datetime.now(timezone.utc)
     db.commit()
+    
+    # Get requester name for logging
+    requester = db.get(User, request.requester_id)
+    requester_name = requester.name if requester else f"User ID {request.requester_id}"
+    
+    # Log the request denial event
+    crud.add_user_event(
+        db,
+        event_type=UserEventType.REQUEST_DENIED,
+        actor_user_id=current_user.id,
+        notes=f"Denied request from {requester_name} for {request.requested_email}",
+    )
     
     return {"message": "Request denied", "request_id": request_id}
 

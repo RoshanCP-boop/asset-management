@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, getErrorMessage } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { formatDateTime } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -76,9 +77,6 @@ type AssetEvent = {
   notes?: string | null;
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString();
-}
 
 export default function UserDetailPage() {
   const params = useParams();
@@ -97,6 +95,8 @@ export default function UserDetailPage() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<number>>(new Set());
   const [assigning, setAssigning] = useState(false);
   const [showAssignSection, setShowAssignSection] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const canAssign = currentUser?.role === "ADMIN" || currentUser?.role === "MANAGER";
 
@@ -161,14 +161,16 @@ export default function UserDetailPage() {
 
   async function bulkAssign() {
     if (selectedAssetIds.size === 0) {
-      alert("Please select at least one asset to assign.");
+      setActionError("Please select at least one asset to assign.");
       return;
     }
 
     setAssigning(true);
+    setActionError(null);
+    setActionMessage(null);
     const token = getToken();
     if (!token) {
-      alert("Not logged in");
+      setActionError("Not logged in");
       setAssigning(false);
       return;
     }
@@ -197,11 +199,11 @@ export default function UserDetailPage() {
     setShowAssignSection(false);
 
     if (results.failed.length > 0) {
-      alert(
-        `Assigned ${results.success} asset(s).\n\nFailed:\n${results.failed.join("\n")}`
+      setActionMessage(
+        `Assigned ${results.success} asset(s). Failed: ${results.failed.join(", ")}`
       );
     } else {
-      alert(`Successfully assigned ${results.success} asset(s).`);
+      setActionMessage(`Successfully assigned ${results.success} asset(s).`);
     }
 
     // Reload data
@@ -234,9 +236,9 @@ export default function UserDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <div className="loading-spinner" />
           <p className="text-sm text-muted-foreground">Loading user details...</p>
         </div>
       </div>
@@ -290,6 +292,16 @@ export default function UserDetailPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {actionError && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700">{actionError}</p>
+        </div>
+      )}
+      {actionMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-sm text-emerald-700">{actionMessage}</p>
+        </div>
+      )}
       {/* User Info Card */}
       <Card className="shadow-lg border-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800">
@@ -495,50 +507,97 @@ export default function UserDetailPage() {
       )}
 
       {/* Event History */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Event History ({events.length})</CardTitle>
+      <Card className="shadow-xl border-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Event History
+            <span className="text-sm font-normal text-slate-500">({events.length})</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {events.length === 0 ? (
-            <p className="text-muted-foreground">No events related to this user.</p>
+            <div className="p-6 text-center text-muted-foreground">
+              No events related to this user.
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Asset ID</TableHead>
-                  <TableHead>Event Type</TableHead>
-                  <TableHead>Role in Event</TableHead>
-                  <TableHead>Notes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.map((event, index) => {
-                  // Determine user's role in this event
-                  const roles: string[] = [];
-                  if (event.actor_user_id === user.id) roles.push("Performed");
-                  if (event.to_user_id === user.id) roles.push("Assigned To");
-                  if (event.from_user_id === user.id) roles.push("Returned From");
-                  
-                  return (
-                    <TableRow key={event.id}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{formatDate(event.timestamp)}</TableCell>
-                      <TableCell>
-                        <Link href={`/assets/${event.asset_id}`} className="text-blue-600 hover:underline">
-                          {event.asset_id}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{event.event_type}</TableCell>
-                      <TableCell>{roles.join(", ") || "-"}</TableCell>
-                      <TableCell>{event.notes ?? "-"}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="max-h-96 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-44">Timestamp</TableHead>
+                    <TableHead className="w-28">Asset</TableHead>
+                    <TableHead className="w-32">Event</TableHead>
+                    <TableHead className="w-32">Role</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {events.map((event) => {
+                    // Determine user's role in this event
+                    const roles: string[] = [];
+                    if (event.actor_user_id === user.id) roles.push("Performed");
+                    if (event.to_user_id === user.id) roles.push("Assigned To");
+                    if (event.from_user_id === user.id) roles.push("Returned From");
+                    
+                    return (
+                      <TableRow key={event.id} className="table-row-hover">
+                        <TableCell className="text-sm text-slate-600">
+                          {formatDateTime(event.timestamp)}
+                        </TableCell>
+                        <TableCell>
+                          <Link 
+                            href={`/assets/${event.asset_id}`} 
+                            className="text-indigo-600 hover:text-indigo-800 font-medium"
+                          >
+                            #{event.asset_id}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            event.event_type === "CREATE" ? "bg-green-100 text-green-800" :
+                            event.event_type === "ASSIGN" ? "bg-blue-100 text-blue-800" :
+                            event.event_type === "RETURN" ? "bg-amber-100 text-amber-800" :
+                            event.event_type === "MOVE" ? "bg-purple-100 text-purple-800" :
+                            event.event_type === "UPDATE" ? "bg-indigo-100 text-indigo-800" :
+                            event.event_type === "REPAIR" ? "bg-cyan-100 text-cyan-800" :
+                            event.event_type === "RETIRE" ? "bg-red-100 text-red-800" :
+                            "bg-gray-100 text-gray-800"
+                          }`}>
+                            {event.event_type.replace(/_/g, " ")}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {roles.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {roles.map((role, i) => (
+                                <span 
+                                  key={i}
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    role === "Performed" ? "bg-slate-100 text-slate-700" :
+                                    role === "Assigned To" ? "bg-green-100 text-green-700" :
+                                    "bg-amber-100 text-amber-700"
+                                  }`}
+                                >
+                                  {role}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-500 max-w-xs truncate" title={event.notes ?? ""}>
+                          {event.notes ?? "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

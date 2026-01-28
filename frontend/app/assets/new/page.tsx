@@ -84,6 +84,8 @@ export default function NewAssetPage() {
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serial_number, setSerial] = useState("");
+  const [warrantyStart, setWarrantyStart] = useState<string>("");
+  const [warrantyEnd, setWarrantyEnd] = useState<string>("");
   const [location_id, setLocationId] = useState<number | "">("");
 
   const [locations, setLocations] = useState<Location[]>([]);
@@ -180,10 +182,14 @@ export default function NewAssetPage() {
             purchase_date,
             renewal_date,
             
+            // Hardware warranty dates
+            warranty_start: !isSoftware && warrantyStart ? warrantyStart : null,
+            warranty_end: !isSoftware && warrantyEnd ? warrantyEnd : null,
+            
             // Software seat tracking
             seats_total: isSoftware && seatsTotal ? parseInt(seatsTotal, 10) : null,
             seats_used: isSoftware ? 0 : null,
-  
+
             location_id: location_id === "" ? null : location_id,
           }),
         },
@@ -283,6 +289,26 @@ export default function NewAssetPage() {
                   </select>
                 </div>
               )}
+              
+              {/* Warranty dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <div className="text-sm">Warranty Start</div>
+                  <Input
+                    type="date"
+                    value={warrantyStart}
+                    onChange={(e) => setWarrantyStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm">Warranty End</div>
+                  <Input
+                    type="date"
+                    value={warrantyEnd}
+                    onChange={(e) => setWarrantyEnd(e.target.value)}
+                  />
+                </div>
+              </div>
             </>
 ) : (
   <>
