@@ -37,7 +37,6 @@ class UserRead(APIModel):
     email: EmailStr
     role: UserRole
     is_active: bool
-    must_change_password: bool = False
 
     @computed_field
     @property
@@ -269,6 +268,33 @@ class UserEventRead(APIModel):
     actor_user_name: str | None = None
 
 
+# ---- Asset Requests ----
+class AssetRequestCreate(BaseModel):
+    request_type: str = "NEW_ASSET"  # NEW_ASSET or EXISTING_ASSET
+    asset_type_requested: Optional[AssetType] = None  # For NEW_ASSET
+    description: Optional[str] = None  # "I need a laptop for development"
+    asset_id: Optional[int] = None  # For EXISTING_ASSET - specific asset they want
+
+
+class AssetRequestRead(APIModel):
+    id: int
+    request_type: str
+    asset_type_requested: Optional[str] = None
+    description: Optional[str] = None
+    asset_id: Optional[int] = None
+    requester_id: int
+    status: str
+    resolved_by_id: Optional[int] = None
+    resolution_notes: Optional[str] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    
+    # Resolved names for display
+    requester_name: Optional[str] = None
+    asset_tag: Optional[str] = None  # If requesting specific asset
+    resolved_by_name: Optional[str] = None
+
+
 # Pydantic v2: resolve forward refs / circular refs
 AssetDetailRead.model_rebuild()
 AssetRead.model_rebuild()
@@ -277,4 +303,5 @@ UserRead.model_rebuild()
 LocationRead.model_rebuild()
 UserRequestRead.model_rebuild()
 UserEventRead.model_rebuild()
+AssetRequestRead.model_rebuild()
 

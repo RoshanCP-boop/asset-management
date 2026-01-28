@@ -1,20 +1,19 @@
 import os
-import secrets
-import string
 from contextlib import asynccontextmanager
 from time import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.db import SessionLocal
-from app.auth import hash_password
 from app.models import User, UserRole
 from app.routers.auth import router as auth_router
 from app.routers.assets import router as assets_router
 from app.routers.users import router as users_router
 from app.routers.locations import router as locations_router
 from app.routers.user_requests import router as user_requests_router
+from app.routers.asset_requests import router as asset_requests_router
 from app.routers.audit import router as audit_router
 # Only import test router in development
 DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
@@ -22,51 +21,35 @@ if DEBUG_MODE:
     from app.routers.test_db import router as test_db_router
 
 
-def generate_secure_password(length: int = 16) -> str:
-    """Generate a secure random password."""
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
-
-
-def seed_default_admin():
-    """Create a default admin user if no users exist in the database."""
+def check_first_run():
+    """Check if this is the first run (no users) and print instructions."""
     db = SessionLocal()
     try:
         user_count = db.query(User).count()
         if user_count == 0:
-            password = generate_secure_password()
-            admin = User(
-                name="Admin",
-                email="admin@localhost",
-                password_hash=hash_password(password),
-                role=UserRole.ADMIN,
-                is_active=True,
-                must_change_password=True,
-            )
-            db.add(admin)
-            db.commit()
-            
-            print("\n" + "=" * 50)
-            print("🔐 FIRST RUN: Default admin account created")
-            print("=" * 50)
-            print(f"   Email:    admin@localhost")
-            print(f"   Password: {password}")
-            print("=" * 50)
-            print("   ⚠️  Please log in and change this password!")
-            print("=" * 50 + "\n")
+            print("\n" + "=" * 60)
+            print("🚀 FIRST RUN: No users in database")
+            print("=" * 60)
+            print("   Sign in with Google to create the first admin account.")
+            print("   The first user will automatically be an ADMIN.")
+            print("=" * 60 + "\n")
     finally:
         db.close()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: seed admin if needed
-    seed_default_admin()
+    # Startup: check if first run
+    check_first_run()
     yield
     # Shutdown: nothing to do
 
 
 app = FastAPI(title="Asset Management API", lifespan=lifespan)
+
+# Session middleware for OAuth state (required by authlib)
+SESSION_SECRET = os.getenv("SESSION_SECRET", os.getenv("JWT_SECRET", "dev-session-secret"))
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 # Basic in-memory rate limiting (per-process)
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "120"))
@@ -123,5 +106,6 @@ app.include_router(locations_router)
 app.include_router(users_router)
 app.include_router(user_requests_router)
 app.include_router(assets_router)
+app.include_router(asset_requests_router)
 app.include_router(auth_router)
 app.include_router(audit_router)

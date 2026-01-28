@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiFetch, getErrorMessage } from "@/lib/api";
 import { getToken, clearToken } from "@/lib/auth";
-import { validatePassword, validateConfirmPassword } from "@/lib/validation";
 import { useRouter, useSearchParams } from "next/navigation";
 
 
@@ -45,7 +44,34 @@ type CurrentUser = {
   name: string;
   role: string;
   email: string;
-  must_change_password: boolean;
+};
+
+type AssetRequest = {
+  id: number;
+  request_type: string;
+  asset_type_requested: string | null;
+  description: string | null;
+  asset_id: number | null;
+  requester_id: number;
+  status: string;
+  resolved_by_id: number | null;
+  resolution_notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  requester_name: string | null;
+  asset_tag: string | null;
+  resolved_by_name: string | null;
+};
+
+type AvailableAsset = {
+  id: number;
+  asset_tag: string;
+  asset_type: string;
+  category: string | null;
+  subscription: string | null;
+  model: string | null;
+  seats_total: number | null;
+  seats_used: number | null;
 };
 
 // Category priority for hardware sorting (lower = higher priority)
@@ -89,20 +115,28 @@ export default function AssetsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
 
-  // Change password form state
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
   // Role-based permissions
   const canCreateAsset = currentUser?.role === "ADMIN";
   const canSeeUsers = currentUser?.role !== "EMPLOYEE";
   const isAdmin = currentUser?.role === "ADMIN";
-  const mustChangePassword = currentUser?.must_change_password === true;
+  const isManager = currentUser?.role === "MANAGER";
+  const isEmployee = currentUser?.role === "EMPLOYEE";
+  const canApproveRequests = isAdmin || isManager;
+
+  // Asset request state
+  const [showAssetRequestForm, setShowAssetRequestForm] = useState(false);
+  const [assetRequests, setAssetRequests] = useState<AssetRequest[]>([]);
+  const [pendingAssetRequestCount, setPendingAssetRequestCount] = useState(0);
+  const [requestDescription, setRequestDescription] = useState("");
+  const [requestAssetType, setRequestAssetType] = useState<"HARDWARE" | "SOFTWARE">("HARDWARE");
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestSuccess, setRequestSuccess] = useState<string | null>(null);
+  
+  // Available assets for approval assignment
+  const [availableAssets, setAvailableAssets] = useState<AvailableAsset[]>([]);
+  const [selectedAssetForRequest, setSelectedAssetForRequest] = useState<Record<number, number | null>>({});
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -357,11 +391,36 @@ export default function AssetsPage() {
       setAssets(assetsData);
       setCurrentUser(meData);
 
-      // Fetch pending request count for admins
+      // Fetch pending user request count for admins
       if (meData.role === "ADMIN") {
         try {
           const countData = await apiFetch<{ count: number }>("/user-requests/pending-count", {}, token);
           setPendingRequestCount(countData.count);
+        } catch {
+          // Ignore errors
+        }
+      }
+
+      // Fetch asset requests
+      if (meData.role === "ADMIN" || meData.role === "MANAGER") {
+        // Admins/Managers see all pending requests and available assets
+        try {
+          const [requestsData, countData, availableData] = await Promise.all([
+            apiFetch<AssetRequest[]>("/asset-requests?status_filter=PENDING", {}, token),
+            apiFetch<{ count: number }>("/asset-requests/pending-count", {}, token),
+            apiFetch<AvailableAsset[]>("/asset-requests/available-assets", {}, token),
+          ]);
+          setAssetRequests(requestsData);
+          setPendingAssetRequestCount(countData.count);
+          setAvailableAssets(availableData);
+        } catch {
+          // Ignore errors
+        }
+      } else {
+        // Employees see their own requests
+        try {
+          const requestsData = await apiFetch<AssetRequest[]>("/asset-requests/my-requests", {}, token);
+          setAssetRequests(requestsData);
         } catch {
           // Ignore errors
         }
@@ -374,68 +433,79 @@ export default function AssetsPage() {
     }
   }
 
-  async function changePassword() {
-    setPasswordError(null);
-    setPasswordMessage(null);
-
-    // Validate current password
-    if (!currentPassword) {
-      setPasswordError("Current password is required");
-      return;
-    }
-    
-    // Validate new password
-    const newPwResult = validatePassword(newPassword);
-    if (!newPwResult.isValid) {
-      setPasswordError(newPwResult.error ?? "Invalid password");
-      return;
-    }
-    
-    // Validate confirm password
-    const confirmResult = validateConfirmPassword(newPassword, confirmPassword);
-    if (!confirmResult.isValid) {
-      setPasswordError(confirmResult.error ?? "Passwords do not match");
+  // Asset request functions
+  async function submitAssetRequest() {
+    if (!requestDescription.trim()) {
+      setRequestError("Please describe what you need");
       return;
     }
 
-    setChangingPassword(true);
+    setSubmittingRequest(true);
+    setRequestError(null);
+    setRequestSuccess(null);
+
     try {
       const token = getToken();
       if (!token) throw new Error("Not logged in");
 
-      await apiFetch(
-        "/auth/change-password",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            current_password: currentPassword,
-            new_password: newPassword,
-          }),
-        },
-        token
-      );
+      await apiFetch("/asset-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          request_type: "NEW_ASSET",
+          asset_type_requested: requestAssetType,
+          description: requestDescription,
+        }),
+      }, token);
 
-      setPasswordMessage("Password changed successfully!");
-      setShowPasswordForm(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      // Reload to update must_change_password status
+      setRequestSuccess("Request submitted! An admin or manager will review it.");
+      setRequestDescription("");
+      setShowAssetRequestForm(false);
       await loadAssets();
     } catch (err: unknown) {
-      setPasswordError(getErrorMessage(err));
+      setRequestError(getErrorMessage(err));
     } finally {
-      setChangingPassword(false);
+      setSubmittingRequest(false);
     }
   }
 
-  function cancelPasswordChange() {
-    setShowPasswordForm(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setPasswordError(null);
-    setPasswordMessage(null);
+  async function approveAssetRequest(requestId: number, assignAssetId?: number | null) {
+    try {
+      const token = getToken();
+      if (!token) return;
+
+      await apiFetch(`/asset-requests/${requestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({
+          assign_asset_id: assignAssetId || null,
+        }),
+      }, token);
+
+      // Clear selection for this request
+      setSelectedAssetForRequest(prev => {
+        const updated = { ...prev };
+        delete updated[requestId];
+        return updated;
+      });
+      
+      await loadAssets();
+    } catch (err: unknown) {
+      setRequestError(getErrorMessage(err));
+    }
+  }
+
+  async function denyAssetRequest(requestId: number) {
+    try {
+      const token = getToken();
+      if (!token) return;
+
+      await apiFetch(`/asset-requests/${requestId}/deny`, {
+        method: "POST",
+      }, token);
+
+      await loadAssets();
+    } catch (err: unknown) {
+      setRequestError(getErrorMessage(err));
+    }
   }
 
   useEffect(() => {
@@ -487,6 +557,23 @@ export default function AssetsPage() {
                   New Asset         
                 </Button>
               )}
+
+              {/* Request Asset button - for employees, or admin/manager to see pending */}
+              <Button 
+                variant="outline"
+                onClick={() => setShowAssetRequestForm(true)}
+                className="relative hover-lift active-scale"
+              > 
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                {canApproveRequests ? "Asset Requests" : "Request Asset"}
+                {canApproveRequests && pendingAssetRequestCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center animate-pulse-soft shadow-lg shadow-amber-500/30">
+                    {pendingAssetRequestCount}
+                  </span>
+                )}
+              </Button>
 
               {canSeeUsers && (
                 <Button variant="outline" onClick={() => router.push("/users")} className="relative hover-lift active-scale">
@@ -622,7 +709,7 @@ export default function AssetsPage() {
                 <Button
                   variant="outline"
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-                  className={`hover-lift active-scale flex items-center gap-2 ${mustChangePassword ? "border-orange-300" : ""}`}
+                  className="hover-lift active-scale flex items-center gap-2"
                 >
                   <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium">
                     {currentUser?.name?.charAt(0).toUpperCase() || "U"}
@@ -633,9 +720,6 @@ export default function AssetsPage() {
                   <svg className={`w-4 h-4 transition-transform ${showProfileMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
-                  {mustChangePassword && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
-                  )}
                 </Button>
 
                 {showProfileMenu && (
@@ -667,27 +751,6 @@ export default function AssetsPage() {
                             Audit Dashboard
                           </Link>
                         )}
-
-                        {/* Change Password */}
-                        <button
-                          onClick={() => {
-                            setShowProfileMenu(false);
-                            setShowPasswordForm(true);
-                          }}
-                          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-                            mustChangePassword 
-                              ? "text-orange-600 bg-orange-50 dark:bg-orange-900/20" 
-                              : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                          }`}
-                        >
-                          <svg className={`w-4 h-4 ${mustChangePassword ? "text-orange-500" : "text-slate-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          Change Password
-                          {mustChangePassword && (
-                            <span className="ml-auto text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded">Required</span>
-                          )}
-                        </button>
 
                         <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
 
@@ -729,72 +792,6 @@ export default function AssetsPage() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Change Password Form */}
-          {showPasswordForm && (
-            <Card className="border-2 border-blue-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Change Password</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {passwordError && (
-                  <p className="text-sm text-red-600">{passwordError}</p>
-                )}
-                {passwordMessage && (
-                  <p className="text-sm text-emerald-600">{passwordMessage}</p>
-                )}
-                {/* Hidden username field for browser password manager */}
-                <input
-                  type="hidden"
-                  name="username"
-                  autoComplete="username"
-                  value={currentUser?.email ?? ""}
-                  readOnly
-                />
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Current Password</label>
-                  <Input
-                    type="password"
-                    name="current-password"
-                    autoComplete="current-password"
-                    placeholder="Enter current password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">New Password</label>
-                  <Input
-                    type="password"
-                    name="new-password"
-                    autoComplete="new-password"
-                    placeholder="Minimum 8 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Confirm New Password</label>
-                  <Input
-                    type="password"
-                    name="confirm-password"
-                    autoComplete="new-password"
-                    placeholder="Re-enter new password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button onClick={changePassword} disabled={changingPassword}>
-                    {changingPassword ? "Changing..." : "Change Password"}
-                  </Button>
-                  <Button variant="outline" onClick={cancelPasswordChange} disabled={changingPassword}>
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Search and Filter */}
           <div className="flex flex-wrap gap-3 mb-4">
             <Input
@@ -1016,6 +1013,256 @@ export default function AssetsPage() {
         </CardContent>
       </Card>
       </main>
+
+      {/* Asset Request Modal */}
+      {showAssetRequestForm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowAssetRequestForm(false)}
+          />
+          
+          {/* Modal content */}
+          <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">
+                  {canApproveRequests ? "Asset Requests" : "Request an Asset"}
+                </h2>
+                <button
+                  onClick={() => setShowAssetRequestForm(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Success/Error messages */}
+              {requestSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+                  {requestSuccess}
+                </div>
+              )}
+              {requestError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {requestError}
+                </div>
+              )}
+
+              {/* Request form for employees */}
+              {!canApproveRequests && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Asset Type</label>
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={requestAssetType}
+                      onChange={(e) => setRequestAssetType(e.target.value as "HARDWARE" | "SOFTWARE")}
+                    >
+                      <option value="HARDWARE">Hardware</option>
+                      <option value="SOFTWARE">Software</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">What do you need?</label>
+                    <textarea
+                      className="w-full border rounded-lg px-3 py-2 min-h-[100px]"
+                      placeholder="Describe the asset you need (e.g., 'I need a laptop for development work')"
+                      value={requestDescription}
+                      onChange={(e) => setRequestDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setShowAssetRequestForm(false)}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      className="btn-primary-gradient text-white"
+                      onClick={submitAssetRequest}
+                      disabled={submittingRequest}
+                    >
+                      {submittingRequest ? "Submitting..." : "Submit Request"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Request list for admins/managers */}
+              {canApproveRequests && (
+                <div className="space-y-4">
+                  {/* Option for admin to also make a request */}
+                  <div className="border-b pb-4 mb-4">
+                    <h3 className="text-sm font-medium text-slate-600 mb-2">Need to request an asset yourself?</h3>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <select
+                          className="border rounded-lg px-3 py-2 text-sm flex-shrink-0"
+                          value={requestAssetType}
+                          onChange={(e) => setRequestAssetType(e.target.value as "HARDWARE" | "SOFTWARE")}
+                        >
+                          <option value="HARDWARE">Hardware</option>
+                          <option value="SOFTWARE">Software</option>
+                        </select>
+                        <input
+                          className="flex-1 border rounded-lg px-3 py-2 text-sm"
+                          placeholder="What do you need?"
+                          value={requestDescription}
+                          onChange={(e) => setRequestDescription(e.target.value)}
+                        />
+                        <Button 
+                          size="sm"
+                          className="btn-primary-gradient text-white"
+                          onClick={submitAssetRequest}
+                          disabled={submittingRequest}
+                        >
+                          Request
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pending requests */}
+                  <h3 className="text-sm font-medium text-slate-600">Pending Requests</h3>
+                  {assetRequests.filter(r => r.status === "PENDING").length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-4">No pending requests</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {assetRequests.filter(r => r.status === "PENDING").map((request) => {
+                        // Filter available assets by requested type
+                        const matchingAssets = availableAssets.filter(a => 
+                          !request.asset_type_requested || a.asset_type === request.asset_type_requested
+                        );
+                        const selectedId = selectedAssetForRequest[request.id];
+                        
+                        return (
+                        <div key={request.id} className="border rounded-lg p-3">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium text-sm">{request.requester_name}</span>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    request.asset_type_requested === "HARDWARE" 
+                                      ? "bg-blue-100 text-blue-700" 
+                                      : "bg-purple-100 text-purple-700"
+                                  }`}>
+                                    {request.asset_type_requested || "N/A"}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-slate-600">{request.description}</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {new Date(request.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* Asset selection for assignment */}
+                            <div className="pt-2 border-t space-y-2">
+                              <select
+                                className="w-full border rounded px-2 py-1.5 text-sm bg-white"
+                                value={selectedId ?? ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? parseInt(e.target.value) : null;
+                                  setSelectedAssetForRequest(prev => ({
+                                    ...prev,
+                                    [request.id]: val
+                                  }));
+                                }}
+                              >
+                                <option value="">-- Select asset to assign (optional) --</option>
+                                {matchingAssets.map(asset => (
+                                  <option key={asset.id} value={asset.id}>
+                                    {asset.asset_tag} - {asset.category || asset.subscription || "Asset"} 
+                                    {asset.model ? ` (${asset.model})` : ""}
+                                    {asset.asset_type === "SOFTWARE" && asset.seats_total 
+                                      ? ` [${(asset.seats_used || 0)}/${asset.seats_total} seats used]` 
+                                      : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="flex-1 text-green-600 border-green-300 hover:bg-green-50"
+                                  onClick={() => approveAssetRequest(request.id, selectedId)}
+                                >
+                                  {selectedId ? "Approve & Assign" : "Approve"}
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+                                  onClick={() => denyAssetRequest(request.id)}
+                                >
+                                  Deny
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );})}
+                    </div>
+                  )}
+
+                  {/* Show previous requests too */}
+                  {assetRequests.filter(r => r.status !== "PENDING").length > 0 && (
+                    <>
+                      <h3 className="text-sm font-medium text-slate-600 mt-6">Recent Decisions</h3>
+                      <div className="space-y-2">
+                        {assetRequests.filter(r => r.status !== "PENDING").slice(0, 5).map((request) => (
+                          <div key={request.id} className="border rounded-lg p-2 text-sm flex items-center justify-between">
+                            <div>
+                              <span className="font-medium">{request.requester_name}</span>
+                              <span className="text-slate-400 mx-2">-</span>
+                              <span className="text-slate-600">{request.description?.slice(0, 50)}...</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${
+                              request.status === "APPROVED" 
+                                ? "bg-green-100 text-green-700" 
+                                : "bg-red-100 text-red-700"
+                            }`}>
+                              {request.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Employee's own request history */}
+              {!canApproveRequests && assetRequests.length > 0 && (
+                <div className="mt-6 pt-4 border-t">
+                  <h3 className="text-sm font-medium text-slate-600 mb-3">Your Requests</h3>
+                  <div className="space-y-2">
+                    {assetRequests.map((request) => (
+                      <div key={request.id} className="border rounded-lg p-2 text-sm flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-600">{request.description?.slice(0, 50)}{(request.description?.length ?? 0) > 50 ? "..." : ""}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${
+                          request.status === "PENDING" 
+                            ? "bg-yellow-100 text-yellow-700" 
+                            : request.status === "APPROVED"
+                              ? "bg-green-100 text-green-700" 
+                              : "bg-red-100 text-red-700"
+                        }`}>
+                          {request.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

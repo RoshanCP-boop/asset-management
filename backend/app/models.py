@@ -56,10 +56,13 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(200))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
 
-    password_hash: Mapped[str] = mapped_column(String(255))
+    # Password is nullable for Google OAuth users
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Google OAuth ID
+    google_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole,  name="userrole"), default=UserRole.EMPLOYEE, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     assigned_assets = relationship("Asset", back_populates="assigned_to")
 
 class Asset(Base):
@@ -176,6 +179,60 @@ class UserRequest(Base):
     
     requester = relationship("User", foreign_keys=[requester_id])
     target_admin = relationship("User", foreign_keys=[target_admin_id])
+
+
+class AssetRequestStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    DENIED = "DENIED"
+
+
+class AssetRequestType(str, Enum):
+    NEW_ASSET = "NEW_ASSET"  # Request a new asset (e.g., need a laptop)
+    EXISTING_ASSET = "EXISTING_ASSET"  # Request a specific existing asset
+
+
+class AssetRequest(Base):
+    """Employee requests for assets."""
+    __tablename__ = "asset_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    
+    request_type: Mapped[AssetRequestType] = mapped_column(
+        SAEnum(AssetRequestType, name="assetrequesttype"),
+        default=AssetRequestType.NEW_ASSET
+    )
+    
+    # For NEW_ASSET requests - describe what they need
+    asset_type_requested: Mapped[AssetType | None] = mapped_column(
+        SAEnum(AssetType, name="assettype", create_constraint=False),
+        nullable=True
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)  # "I need a laptop for development work"
+    
+    # For EXISTING_ASSET requests - specific asset
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True, index=True)
+    
+    # Who made the request
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    
+    status: Mapped[AssetRequestStatus] = mapped_column(
+        SAEnum(AssetRequestStatus, name="assetrequeststatus"),
+        default=AssetRequestStatus.PENDING,
+        index=True
+    )
+    
+    # Admin/Manager response
+    resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    
+    # Relationships
+    requester = relationship("User", foreign_keys=[requester_id])
+    resolved_by = relationship("User", foreign_keys=[resolved_by_id])
+    asset = relationship("Asset", foreign_keys=[asset_id])
 
 
 class UserEventType(str, Enum):
