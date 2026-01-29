@@ -10,6 +10,40 @@ services:
       - "5432:5432"
     volumes:
       - asset_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asset_user -d asset_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: asset_mgmt_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://asset_user:asset_pass@db:5432/asset_db
+      JWT_SECRET: change-this-in-production-to-a-long-random-string
+      FRONTEND_URL: http://localhost:3000
+      # Add your Google OAuth credentials here
+      # GOOGLE_CLIENT_ID: your-client-id
+      # GOOGLE_CLIENT_SECRET: your-client-secret
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "uv run alembic upgrade head && 
+             uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./frontend
+    container_name: asset_mgmt_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
 
 volumes:
   asset_db_data:
