@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:16
     container_name: asset_mgmt_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: asset_user
       POSTGRES_PASSWORD: asset_pass
@@ -19,6 +20,7 @@ services:
   backend:
     build: ./backend
     container_name: asset_mgmt_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
@@ -38,6 +40,7 @@ services:
   frontend:
     build: ./frontend
     container_name: asset_mgmt_frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:

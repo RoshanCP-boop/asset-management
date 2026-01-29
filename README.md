@@ -316,6 +316,21 @@ sudo systemctl restart caddy
 3. The first person from your company domain becomes **Admin**
 4. Invite your team from the **Users** page
 
+## Sample Data
+
+Want to see how the app looks with data? We've included a sample CSV file with 30 assets (20 hardware + 10 software):
+
+```bash
+# After logging in as Admin, go to Assets page and use "Import CSV"
+# Upload the file: sample-data/assets.csv
+```
+
+The sample data includes:
+- **Laptops**: MacBooks, Dell XPS, ThinkPads
+- **Monitors**: Dell UltraSharp, LG 4K
+- **Peripherals**: Keyboards, mice, headsets, webcams
+- **Software**: JetBrains, GitHub, Figma, Microsoft 365, Slack, etc.
+
 ### Updating
 
 To update to the latest version:
