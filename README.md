@@ -186,10 +186,29 @@ Want to run ASTRA for your company? Here's a complete guide to deploy it on your
 ### Step 1: Set Up Your Server
 
 Any Linux server with Docker works. Popular options:
-- **DigitalOcean** ($6/mo) - https://digitalocean.com
-- **Hetzner** (€4/mo) - https://hetzner.com
-- **AWS EC2** (free tier available) - https://aws.amazon.com
-- **Your own hardware**
+
+| Provider | Cost | Notes |
+|----------|------|-------|
+| **Oracle Cloud** | **Free forever** | 2 VMs, 24GB RAM on ARM - best free option |
+| **AWS EC2** | Free for 12 months | t2.micro, then ~$10/mo |
+| **Hetzner** | €4/mo | Great value, EU-based |
+| **DigitalOcean** | $6/mo | Easy to use |
+| **Your own hardware** | Free | Old laptop, Raspberry Pi, etc. |
+
+#### Oracle Cloud (Recommended for Free Hosting)
+
+Oracle offers an **Always Free** tier that doesn't expire:
+- 2 AMD VMs (1GB RAM each) OR 4 ARM VMs (24GB RAM total)
+- 200GB storage
+- 10TB bandwidth/month
+
+**Drawbacks to be aware of:**
+- Sign-up can be strict (use real info, may need retry)
+- ARM instances often "out of capacity" - keep trying or use AMD
+- Console UI is more complex than other providers
+- Rare reports of account termination for inactivity (log in monthly)
+
+Sign up: https://www.oracle.com/cloud/free/
 
 Install Docker on your server:
 ```bash
@@ -259,7 +278,13 @@ Your app is now running:
 
 ### Step 6: Set Up Domain (Optional but Recommended)
 
-Point your domain's DNS to your server IP, then set up a reverse proxy like Nginx or Caddy:
+**Don't have a domain?** Use a free subdomain:
+- **DuckDNS** (free): Get `yourname.duckdns.org` at https://www.duckdns.org
+- Just point it to your server IP and you're done
+
+**Have your own domain?** Point your domain's DNS to your server IP.
+
+Then set up a reverse proxy like Caddy for HTTPS:
 
 **Using Caddy (easiest, auto-HTTPS):**
 ```bash
