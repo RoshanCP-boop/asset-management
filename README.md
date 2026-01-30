@@ -4,6 +4,28 @@ A modern, full-stack asset management application with multi-tenancy support, Go
 
 ![ASTRA](frontend/public/logo.png)
 
+## Screenshots
+
+### Asset Dashboard
+View and manage all your organization's assets with powerful search and filtering.
+
+![Asset List](docs/screenshots/asset-list.png)
+
+### Asset Details
+Detailed view of individual assets with full history and assignment management.
+
+![Asset Details](docs/screenshots/asset-details.png)
+
+### Create New Asset
+Easily add hardware or software assets with auto-generated tags.
+
+![Create Asset](docs/screenshots/create-asset.png)
+
+### Audit Dashboard
+Complete visibility into all user and asset activity with exportable logs.
+
+![Audit Dashboard](docs/screenshots/audit-dashboard.png)
+
 ## Features
 
 - **Multi-Tenancy**: Organizations are automatically created based on email domain. Each company sees only their own data.
