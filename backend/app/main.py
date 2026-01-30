@@ -88,6 +88,11 @@ cors_origins = os.getenv(
 )
 allowed_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
 
+# Also allow FRONTEND_URL if set (for production deployments)
+frontend_url = os.getenv("FRONTEND_URL", "")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
