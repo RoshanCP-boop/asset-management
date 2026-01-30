@@ -9,22 +9,30 @@ A full-stack asset management application with multi-tenancy support, Google OAu
 ### Asset Dashboard
 View and manage all your organization's assets with powerful search and filtering.
 
-![Asset List](docs/screenshots/asset-list.png)
+| Dark Mode | Light Mode |
+|:---------:|:----------:|
+| ![Asset List Dark](docs/screenshots/asset-list.png) | ![Asset List Light](docs/screenshots/asset-list-light.png) |
 
 ### Asset Details
 Detailed view of individual assets with full history and assignment management.
 
-![Asset Details](docs/screenshots/asset-details.png)
+| Dark Mode | Light Mode |
+|:---------:|:----------:|
+| ![Asset Details Dark](docs/screenshots/asset-details.png) | ![Asset Details Light](docs/screenshots/asset-details-light.png) |
 
 ### Create New Asset
 Easily add hardware or software assets with auto-generated tags.
 
-![Create Asset](docs/screenshots/create-asset.png)
+| Dark Mode | Light Mode |
+|:---------:|:----------:|
+| ![Create Asset Dark](docs/screenshots/create-asset.png) | ![Create Asset Light](docs/screenshots/create-asset-light.png) |
 
 ### Audit Dashboard
 Complete visibility into all user and asset activity with exportable logs.
 
-![Audit Dashboard](docs/screenshots/audit-dashboard.png)
+| Dark Mode | Light Mode |
+|:---------:|:----------:|
+| ![Audit Dashboard Dark](docs/screenshots/audit-dashboard.png) | ![Audit Dashboard Light](docs/screenshots/audit-dashboard-light.png) |
 
 ## Features
 
