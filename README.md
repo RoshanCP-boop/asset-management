@@ -10,6 +10,27 @@ Try ASTRA without installing anything: **[astra-frontend-czrm.onrender.com](http
 
 Sign in with Google to create your own workspace. *(Free tier - may take ~30s to wake up if idle)*
 
+---
+
+## Table of Contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Quick Start](#quick-start-one-command)
+- [Google OAuth Setup](#google-oauth-setup)
+- [Development Setup](#development-setup-manual)
+- [Tech Stack](#tech-stack)
+- [Multi-Tenancy](#multi-tenancy)
+- [User Roles](#user-roles)
+- [Project Structure](#project-structure)
+- [Environment Variables](#environment-variables)
+- [API Documentation](#api-documentation)
+- [Self-Hosting](#self-hosting-for-your-company)
+- [Deploy with Render](#alternative-deploy-with-render)
+- [Sample Data](#sample-data)
+
+---
+
 ## Screenshots
 
 ### Asset Dashboard
@@ -91,7 +112,8 @@ backend:
     GOOGLE_CLIENT_SECRET: your-client-secret
 ```
 
-## Development Setup (Manual)
+<details>
+<summary><h2>Development Setup (Manual)</h2></summary>
 
 If you prefer running services separately for development:
 
@@ -122,6 +144,8 @@ npm run dev
 ### 4. Open the app
 
 Visit [http://localhost:3000](http://localhost:3000)
+
+</details>
 
 ## Tech Stack
 
@@ -161,7 +185,7 @@ Admins can invite team members (especially useful for personal email users):
 | Role | Permissions |
 |------|-------------|
 | **Admin** | Full access: manage assets, users, create invites |
-| **Manager** | Manage assets, view all users |
+| **Manager** | Manage assets (create, edit, assign), view all users |
 | **Employee** | View and manage assigned assets only |
 | **Auditor** | Read-only access to all data and audit logs |
 
@@ -209,7 +233,8 @@ When the backend is running:
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-## Self-Hosting for Your Company
+<details>
+<summary><h2>Self-Hosting for Your Company</h2></summary>
 
 Want to run ASTRA for your company? Here's a complete guide to deploy it on your own server.
 
@@ -337,7 +362,10 @@ sudo systemctl restart caddy
 3. The first person from your company domain becomes **Admin**
 4. Invite your team from the **Users** page
 
-## Alternative: Deploy with Render
+</details>
+
+<details>
+<summary><h2>Alternative: Deploy with Render</h2></summary>
 
 A `render.yaml` Blueprint file is included for quick deployment to [Render](https://render.com). This is useful for demos or testing, but not recommended for production.
 
@@ -354,6 +382,8 @@ A `render.yaml` Blueprint file is included for quick deployment to [Render](http
 - Services sleep after 15 minutes of inactivity (slow cold starts)
 - Free PostgreSQL databases expire after 90 days
 
+</details>
+
 ## Sample Data
 
 Want to see how the app looks with data? We've included a sample CSV file with 30 assets (20 hardware + 10 software):
@@ -368,6 +398,9 @@ The sample data includes:
 - **Monitors**: Dell UltraSharp, LG 4K
 - **Peripherals**: Keyboards, mice, headsets, webcams
 - **Software**: JetBrains, GitHub, Figma, Microsoft 365, Slack, etc.
+
+<details>
+<summary><h3>Updating & Backup</h3></summary>
 
 ### Updating
 
@@ -390,6 +423,8 @@ To restore:
 ```bash
 cat backup.sql | docker exec -i asset_mgmt_db psql -U asset_user asset_db
 ```
+
+</details>
 
 ---
 
