@@ -69,7 +69,7 @@ def get_asset(asset_id: int, db: Session = Depends(get_db), current_user: User =
 @router.put(
     "/{asset_id}",
     response_model=schemas.AssetRead,
-    dependencies=[Depends(require_roles(UserRole.ADMIN))],
+    dependencies=[Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER))],
 )
 def update_asset(
     asset_id: int,
