@@ -82,6 +82,15 @@ def update_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
     if payload.asset_type and payload.asset_type != asset.asset_type:
         raise HTTPException(status_code=400, detail="Asset type cannot be changed")
+    
+    # Managers can only update status and condition
+    if current_user.role == UserRole.MANAGER:
+        restricted_payload = schemas.AssetUpdate(
+            status=payload.status,
+            condition=payload.condition,
+        )
+        return crud.update_asset(db, asset, restricted_payload, actor_user_id=current_user.id)
+    
     return crud.update_asset(db, asset, payload, actor_user_id=current_user.id)
 
 

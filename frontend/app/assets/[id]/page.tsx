@@ -714,7 +714,8 @@ export default function AssetDetailPage() {
                 </p>
               )}
 
-              {asset.asset_type === "HARDWARE" && (
+              {/* Admin-only fields: Manufacturer, Model, Serial Number */}
+              {isAdmin && asset.asset_type === "HARDWARE" && (
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Manufacturer</label>
                   <Input
@@ -725,18 +726,20 @@ export default function AssetDetailPage() {
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-sm font-medium">
-                  {asset.asset_type === "SOFTWARE" ? "Version" : "Model"}
-                </label>
-                <Input
-                  value={editModel}
-                  onChange={(e) => setEditModel(e.target.value)}
-                  placeholder={asset.asset_type === "SOFTWARE" ? "Version (e.g., Pro, Enterprise)" : "Model"}
-                />
-              </div>
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">
+                    {asset.asset_type === "SOFTWARE" ? "Version" : "Model"}
+                  </label>
+                  <Input
+                    value={editModel}
+                    onChange={(e) => setEditModel(e.target.value)}
+                    placeholder={asset.asset_type === "SOFTWARE" ? "Version (e.g., Pro, Enterprise)" : "Model"}
+                  />
+                </div>
+              )}
 
-              {asset.asset_type === "HARDWARE" && (
+              {isAdmin && asset.asset_type === "HARDWARE" && (
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Serial #</label>
                   <Input
@@ -784,8 +787,8 @@ export default function AssetDetailPage() {
                 </div>
               )}
 
-              {/* Location - only for HARDWARE assets */}
-              {asset.asset_type === "HARDWARE" && (
+              {/* Location - only for HARDWARE assets, Admin only */}
+              {isAdmin && asset.asset_type === "HARDWARE" && (
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Location</label>
                   {!showNewLocationInput ? (
@@ -937,14 +940,16 @@ export default function AssetDetailPage() {
                 );
               })()}
 
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Notes</label>
-                <Input
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Notes"
-                />
-              </div>
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Notes</label>
+                  <Input
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Notes"
+                  />
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <Button onClick={saveAsset} disabled={busy}>
