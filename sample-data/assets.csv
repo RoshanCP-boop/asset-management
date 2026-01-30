@@ -1,31 +1,31 @@
-asset_tag,asset_type,category,manufacturer,model,serial_number,purchase_date,warranty_end,status,condition,owner_org,notes
-HW-001,HARDWARE,Laptop,Apple,MacBook Pro 14",SN-MBP-2024-001,2024-01-15,2027-01-15,IN_STOCK,NEW,Company,M3 Pro chip with 18GB RAM
-HW-002,HARDWARE,Laptop,Apple,MacBook Pro 14",SN-MBP-2024-002,2024-01-15,2027-01-15,IN_STOCK,NEW,Company,M3 Pro chip with 18GB RAM
-HW-003,HARDWARE,Laptop,Dell,XPS 15,SN-DELL-2024-001,2024-02-01,2027-02-01,IN_STOCK,NEW,Company,Intel i7 with 32GB RAM
-HW-004,HARDWARE,Laptop,Lenovo,ThinkPad X1 Carbon,SN-LENOVO-2024-001,2024-02-15,2027-02-15,ASSIGNED,GOOD,Company,Currently assigned to engineering
-HW-005,HARDWARE,Monitor,Dell,UltraSharp U2723QE,SN-DELL-MON-001,2024-03-01,2027-03-01,IN_STOCK,NEW,Company,27" 4K USB-C Monitor
-HW-006,HARDWARE,Monitor,Dell,UltraSharp U2723QE,SN-DELL-MON-002,2024-03-01,2027-03-01,IN_STOCK,NEW,Company,27" 4K USB-C Monitor
-HW-007,HARDWARE,Monitor,LG,27UK850-W,SN-LG-MON-001,2023-06-15,2026-06-15,ASSIGNED,GOOD,Company,27" 4K Monitor
-HW-008,HARDWARE,Keyboard,Apple,Magic Keyboard,SN-APPLE-KB-001,2024-01-15,2025-01-15,IN_STOCK,NEW,Company,With Touch ID
-HW-009,HARDWARE,Keyboard,Apple,Magic Keyboard,SN-APPLE-KB-002,2024-01-15,2025-01-15,IN_STOCK,NEW,Company,With Touch ID
-HW-010,HARDWARE,Mouse,Logitech,MX Master 3S,SN-LOGI-MS-001,2024-01-20,2026-01-20,IN_STOCK,NEW,Company,Wireless ergonomic mouse
-HW-011,HARDWARE,Mouse,Logitech,MX Master 3S,SN-LOGI-MS-002,2024-01-20,2026-01-20,ASSIGNED,GOOD,Company,Wireless ergonomic mouse
-HW-012,HARDWARE,Headset,Sony,WH-1000XM5,SN-SONY-HS-001,2024-04-01,2026-04-01,IN_STOCK,NEW,Company,Noise cancelling headphones
-HW-013,HARDWARE,Headset,Sony,WH-1000XM5,SN-SONY-HS-002,2024-04-01,2026-04-01,ASSIGNED,GOOD,Company,Noise cancelling headphones
-HW-014,HARDWARE,Docking Station,CalDigit,TS4,SN-CALDIGIT-001,2024-02-01,2027-02-01,IN_STOCK,NEW,Company,Thunderbolt 4 dock
-HW-015,HARDWARE,Docking Station,CalDigit,TS4,SN-CALDIGIT-002,2024-02-01,2027-02-01,ASSIGNED,GOOD,Company,Thunderbolt 4 dock
-HW-016,HARDWARE,Phone,Apple,iPhone 15 Pro,SN-IPHONE-001,2024-05-01,2026-05-01,ASSIGNED,NEW,Company,Company mobile device
-HW-017,HARDWARE,Tablet,Apple,iPad Pro 12.9",SN-IPAD-001,2024-03-15,2026-03-15,IN_STOCK,NEW,Company,M2 chip with 256GB
-HW-018,HARDWARE,Printer,HP,LaserJet Pro M404dn,SN-HP-PRINT-001,2023-08-01,2026-08-01,IN_STOCK,GOOD,Company,Office laser printer
-HW-019,HARDWARE,Webcam,Logitech,Brio 4K,SN-LOGI-CAM-001,2024-01-10,2026-01-10,IN_STOCK,NEW,Company,4K webcam for video calls
-HW-020,HARDWARE,Webcam,Logitech,Brio 4K,SN-LOGI-CAM-002,2024-01-10,2026-01-10,ASSIGNED,GOOD,Company,4K webcam for video calls
-SW-001,SOFTWARE,Development,JetBrains,All Products Pack,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 10 seats
-SW-002,SOFTWARE,Development,GitHub,Enterprise,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - unlimited repos
-SW-003,SOFTWARE,Design,Figma,Organization,,2024-02-01,,IN_STOCK,NEW,Company,Annual subscription - 15 seats
-SW-004,SOFTWARE,Productivity,Microsoft,365 Business Premium,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
-SW-005,SOFTWARE,Communication,Slack,Business+,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
-SW-006,SOFTWARE,Communication,Zoom,Business,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 20 hosts
-SW-007,SOFTWARE,Security,1Password,Business,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
-SW-008,SOFTWARE,Cloud,AWS,Reserved Instances,,2024-01-01,,IN_STOCK,NEW,Company,1-year reserved capacity
-SW-009,SOFTWARE,Monitoring,Datadog,Pro,,2024-03-01,,IN_STOCK,NEW,Company,Annual subscription
-SW-010,SOFTWARE,Project Management,Linear,Standard,,2024-01-15,,IN_STOCK,NEW,Company,Annual subscription - 30 seats
+asset_tag,asset_type,category,subscription,manufacturer,model,serial_number,purchase_date,warranty_end,status,condition,owner_org,notes
+HW-001,HARDWARE,Laptop,,Apple,MacBook Pro 14",SN-MBP-2024-001,2024-01-15,2027-01-15,IN_STOCK,NEW,Company,M3 Pro chip with 18GB RAM
+HW-002,HARDWARE,Laptop,,Apple,MacBook Pro 14",SN-MBP-2024-002,2024-01-15,2027-01-15,IN_STOCK,NEW,Company,M3 Pro chip with 18GB RAM
+HW-003,HARDWARE,Laptop,,Dell,XPS 15,SN-DELL-2024-001,2024-02-01,2027-02-01,IN_STOCK,NEW,Company,Intel i7 with 32GB RAM
+HW-004,HARDWARE,Laptop,,Lenovo,ThinkPad X1 Carbon,SN-LENOVO-2024-001,2024-02-15,2027-02-15,ASSIGNED,GOOD,Company,Currently assigned to engineering
+HW-005,HARDWARE,Monitor,,Dell,UltraSharp U2723QE,SN-DELL-MON-001,2024-03-01,2027-03-01,IN_STOCK,NEW,Company,27" 4K USB-C Monitor
+HW-006,HARDWARE,Monitor,,Dell,UltraSharp U2723QE,SN-DELL-MON-002,2024-03-01,2027-03-01,IN_STOCK,NEW,Company,27" 4K USB-C Monitor
+HW-007,HARDWARE,Monitor,,LG,27UK850-W,SN-LG-MON-001,2023-06-15,2026-06-15,ASSIGNED,GOOD,Company,27" 4K Monitor
+HW-008,HARDWARE,Keyboard,,Apple,Magic Keyboard,SN-APPLE-KB-001,2024-01-15,2025-01-15,IN_STOCK,NEW,Company,With Touch ID
+HW-009,HARDWARE,Keyboard,,Apple,Magic Keyboard,SN-APPLE-KB-002,2024-01-15,2025-01-15,IN_STOCK,NEW,Company,With Touch ID
+HW-010,HARDWARE,Mouse,,Logitech,MX Master 3S,SN-LOGI-MS-001,2024-01-20,2026-01-20,IN_STOCK,NEW,Company,Wireless ergonomic mouse
+HW-011,HARDWARE,Mouse,,Logitech,MX Master 3S,SN-LOGI-MS-002,2024-01-20,2026-01-20,ASSIGNED,GOOD,Company,Wireless ergonomic mouse
+HW-012,HARDWARE,Headset,,Sony,WH-1000XM5,SN-SONY-HS-001,2024-04-01,2026-04-01,IN_STOCK,NEW,Company,Noise cancelling headphones
+HW-013,HARDWARE,Headset,,Sony,WH-1000XM5,SN-SONY-HS-002,2024-04-01,2026-04-01,ASSIGNED,GOOD,Company,Noise cancelling headphones
+HW-014,HARDWARE,Docking Station,,CalDigit,TS4,SN-CALDIGIT-001,2024-02-01,2027-02-01,IN_STOCK,NEW,Company,Thunderbolt 4 dock
+HW-015,HARDWARE,Docking Station,,CalDigit,TS4,SN-CALDIGIT-002,2024-02-01,2027-02-01,ASSIGNED,GOOD,Company,Thunderbolt 4 dock
+HW-016,HARDWARE,Phone,,Apple,iPhone 15 Pro,SN-IPHONE-001,2024-05-01,2026-05-01,ASSIGNED,NEW,Company,Company mobile device
+HW-017,HARDWARE,Tablet,,Apple,iPad Pro 12.9",SN-IPAD-001,2024-03-15,2026-03-15,IN_STOCK,NEW,Company,M2 chip with 256GB
+HW-018,HARDWARE,Printer,,HP,LaserJet Pro M404dn,SN-HP-PRINT-001,2023-08-01,2026-08-01,IN_STOCK,GOOD,Company,Office laser printer
+HW-019,HARDWARE,Webcam,,Logitech,Brio 4K,SN-LOGI-CAM-001,2024-01-10,2026-01-10,IN_STOCK,NEW,Company,4K webcam for video calls
+HW-020,HARDWARE,Webcam,,Logitech,Brio 4K,SN-LOGI-CAM-002,2024-01-10,2026-01-10,ASSIGNED,GOOD,Company,4K webcam for video calls
+SW-001,SOFTWARE,Development,JetBrains All Products,JetBrains,All Products Pack,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 10 seats
+SW-002,SOFTWARE,Development,GitHub Enterprise,GitHub,Enterprise,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - unlimited repos
+SW-003,SOFTWARE,Design,Figma Organization,Figma,Organization,,2024-02-01,,IN_STOCK,NEW,Company,Annual subscription - 15 seats
+SW-004,SOFTWARE,Productivity,Microsoft 365,Microsoft,365 Business Premium,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
+SW-005,SOFTWARE,Communication,Slack Business+,Slack,Business+,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
+SW-006,SOFTWARE,Communication,Zoom Business,Zoom,Business,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 20 hosts
+SW-007,SOFTWARE,Security,1Password Business,1Password,Business,,2024-01-01,,IN_STOCK,NEW,Company,Annual subscription - 50 seats
+SW-008,SOFTWARE,Cloud,AWS Reserved,AWS,Reserved Instances,,2024-01-01,,IN_STOCK,NEW,Company,1-year reserved capacity
+SW-009,SOFTWARE,Monitoring,Datadog Pro,Datadog,Pro,,2024-03-01,,IN_STOCK,NEW,Company,Annual subscription
+SW-010,SOFTWARE,Project Management,Linear Standard,Linear,Standard,,2024-01-15,,IN_STOCK,NEW,Company,Annual subscription - 30 seats
