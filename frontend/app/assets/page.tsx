@@ -1240,11 +1240,11 @@ function AssetsContent() {
                             const used = asset.seats_used ?? 0;
                             const total = asset.seats_total;
                             const isFull = total !== null && total !== undefined && used >= total;
-                            const status = isFull ? "ASSIGNED" : "IN_STOCK";
+                            const remaining = total !== null && total !== undefined ? total - used : null;
                             const statusClass = isFull ? "status-assigned" : "status-in-stock";
                             return (
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}`}>
-                                {status} ({used}/{total ?? "∞"})
+                                {isFull ? "FULL" : "IN_STOCK"} ({remaining !== null ? `${remaining} left` : "∞"})
                               </span>
                             );
                           })()
