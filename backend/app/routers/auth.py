@@ -277,10 +277,45 @@ def leave_organization(user: User = Depends(get_current_user), db: Session = Dep
     """
     Allow a user to leave their organization.
     Clears their google_id so they can sign in fresh and join a new org.
+    If leaving admin is the only admin, promotes another user.
     """
     from app.models import Asset, AssetStatus
     
     org_name = user.organization.name if user.organization else "Unknown"
+    org_id = user.organization_id
+    
+    # If leaving user is an admin, check if there are other admins
+    if user.role == UserRole.ADMIN and org_id:
+        # Count other admins in the organization
+        other_admins = db.query(User).filter(
+            User.organization_id == org_id,
+            User.role == UserRole.ADMIN,
+            User.id != user.id,
+            User.is_active == True
+        ).count()
+        
+        # If no other admins, promote the oldest active user
+        if other_admins == 0:
+            next_user = db.query(User).filter(
+                User.organization_id == org_id,
+                User.id != user.id,
+                User.is_active == True
+            ).order_by(User.id.asc()).first()
+            
+            if next_user:
+                old_role = next_user.role
+                next_user.role = UserRole.ADMIN
+                
+                # Log the promotion
+                crud.add_user_event(
+                    db,
+                    event_type=UserEventType.ROLE_CHANGED,
+                    target_user_id=next_user.id,
+                    actor_user_id=user.id,
+                    old_value=old_role.value,
+                    new_value=UserRole.ADMIN.value,
+                    notes=f"Auto-promoted to Admin when previous admin left",
+                )
     
     # Return any hardware assets assigned to this user
     assigned_assets = db.query(Asset).filter(
