@@ -215,11 +215,23 @@ def me(user=Depends(get_current_user)):
 @router.delete("/leave-organization")
 def leave_organization(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    Allow a user to leave their organization and delete their account.
-    Next time they sign in, they'll be placed in the correct org based on email domain.
+    Allow a user to leave their organization.
+    Clears their google_id so they can sign in fresh and join a new org.
     """
-    # Log the event before deletion
+    from app.models import Asset, AssetStatus
+    
     org_name = user.organization.name if user.organization else "Unknown"
+    
+    # Return any hardware assets assigned to this user
+    assigned_assets = db.query(Asset).filter(
+        Asset.assigned_to_user_id == user.id
+    ).all()
+    
+    for asset in assigned_assets:
+        asset.assigned_to_user_id = None
+        asset.status = AssetStatus.IN_STOCK
+    
+    # Log the event
     crud.add_user_event(
         db,
         event_type=UserEventType.USER_DEACTIVATED,
@@ -228,8 +240,11 @@ def leave_organization(user: User = Depends(get_current_user), db: Session = Dep
         notes=f"User left organization '{org_name}' voluntarily",
     )
     
-    # Delete the user entirely so they can rejoin fresh
-    db.delete(user)
+    # Clear google_id so they can re-register, deactivate, and remove from org
+    user.google_id = None
+    user.organization_id = None
+    user.is_active = False
+    
     db.commit()
     
     return {"message": "Successfully left organization. You can sign in again to join a new organization."}
