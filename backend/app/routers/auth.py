@@ -207,8 +207,27 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     if "invite_code" in request.session:
         del request.session["invite_code"]
     
+    # Check if user is disabled - but allow reactivation if they previously left (org_id is None)
     if not user.is_active:
-        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_disabled")
+        # If user has no org, they previously left - reactivate them
+        if user.organization_id is None:
+            org, is_first = get_or_create_organization(db, email, invite_code)
+            user.organization_id = org.id
+            user.role = UserRole.ADMIN if is_first else UserRole.EMPLOYEE
+            user.is_active = True
+            user.google_id = google_id
+            db.commit()
+            
+            crud.add_user_event(
+                db,
+                event_type=UserEventType.USER_REACTIVATED,
+                target_user_id=user.id,
+                actor_user_id=user.id,
+                notes="User rejoined after leaving previous organization",
+            )
+        else:
+            # User was disabled by admin, not by leaving
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_disabled")
     
     # Create JWT token
     jwt_token = create_access_token(subject=user.email)
