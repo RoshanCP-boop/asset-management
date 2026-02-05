@@ -228,6 +228,7 @@ export default function AssetDetailPage() {
   const [assignNotes, setAssignNotes] = useState("");
   const [returnNotes, setReturnNotes] = useState("");
   const [returnUserId, setReturnUserId] = useState<number | "">(""); // For software returns
+  const [returnCondition, setReturnCondition] = useState(""); // For hardware returns - update condition
 
   // Update form state
   const [editMode, setEditMode] = useState(false);
@@ -375,6 +376,7 @@ export default function AssetDetailPage() {
           body: JSON.stringify({
             notes: returnNotes || null,
             user_id: asset?.asset_type === "SOFTWARE" ? returnUserId : null,
+            condition: asset?.asset_type === "HARDWARE" && returnCondition ? returnCondition : null,
           }),
         },
         token
@@ -382,6 +384,7 @@ export default function AssetDetailPage() {
 
       setReturnNotes("");
       setReturnUserId("");
+      setReturnCondition("");
       await load();
     } catch (e: unknown) {
       setActionError(getErrorMessage(e));
@@ -1131,6 +1134,23 @@ export default function AssetDetailPage() {
                     <b>Returning from:</b>{" "}
                     {users.find((u) => u.id === asset.assigned_to_user_id)?.name ?? `User #${asset.assigned_to_user_id}`}
                   </p>
+                )}
+
+                {isAssigned && (
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Condition after return</div>
+                    <select
+                      className="w-full border rounded-md px-3 py-2 bg-transparent"
+                      value={returnCondition}
+                      onChange={(e) => setReturnCondition(e.target.value)}
+                    >
+                      <option value="">Keep current ({asset.condition})</option>
+                      <option value="NEW">New</option>
+                      <option value="GOOD">Good</option>
+                      <option value="FAIR">Fair - Needs Data Wipe</option>
+                      <option value="DAMAGED">Damaged - Needs Repair</option>
+                    </select>
+                  </div>
                 )}
 
                 <Input

@@ -97,6 +97,7 @@ def update_asset(
 class ReturnRequest(schemas.APIModel):
     notes: str | None = None
     user_id: int | None = None  # For software: specify which user is returning the seat
+    condition: str | None = None  # For hardware: update condition on return (NEW, GOOD, FAIR, DAMAGED)
 
 
 @router.post(
@@ -144,6 +145,7 @@ def return_asset(
             payload.notes, 
             actor_user_id=current_user.id,
             user_id=payload.user_id,
+            condition=payload.condition,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

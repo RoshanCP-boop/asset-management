@@ -468,6 +468,7 @@ def return_asset(
     notes: str | None = None,
     actor_user_id: int | None = None,
     user_id: int | None = None,  # For software: specify which user is returning
+    condition: str | None = None,  # For hardware: update condition on return
 ):
     asset = db.get(models.Asset, asset_id)
     if not asset:
@@ -520,9 +521,18 @@ def return_asset(
 
         asset.assigned_to_user_id = None
         asset.status = models.AssetStatus.IN_STOCK
+        
+        # Update condition if provided
+        if condition:
+            try:
+                asset.condition = models.AssetCondition(condition)
+            except ValueError:
+                pass  # Invalid condition value, ignore
 
         # Build notes with "Returned from [name]"
         return_note = f"Returned from {previous_user_name}" if previous_user_name else "Returned"
+        if condition:
+            return_note = f"{return_note} (Condition: {condition})"
         if notes:
             return_note = f"{return_note}. {notes}"
 
