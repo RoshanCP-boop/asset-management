@@ -318,17 +318,18 @@ def get_dashboard_stats(
         Asset.renewal_date <= thirty_days
     ).all()
     
-    # Hardware assets by category (top 10)
+    # Hardware assets by category (top 10) - exclude RETIRED
     hardware_category_stats = db.query(
         Asset.category, 
         func.count(Asset.id).label('count')
     ).filter(
         Asset.organization_id == org_id,
         Asset.asset_type == AssetType.HARDWARE,
-        Asset.category != None
+        Asset.category != None,
+        Asset.status != AssetStatus.RETIRED
     ).group_by(Asset.category).order_by(func.count(Asset.id).desc()).limit(10).all()
     
-    # Software/subscriptions breakdown (by subscription name)
+    # Software/subscriptions breakdown (by subscription name) - exclude RETIRED/expired
     software_stats = db.query(
         Asset.subscription, 
         func.count(Asset.id).label('count'),
@@ -337,8 +338,30 @@ def get_dashboard_stats(
     ).filter(
         Asset.organization_id == org_id,
         Asset.asset_type == AssetType.SOFTWARE,
-        Asset.subscription != None
+        Asset.subscription != None,
+        Asset.status != AssetStatus.RETIRED
     ).group_by(Asset.subscription).order_by(func.count(Asset.id).desc()).limit(10).all()
+    
+    # Retired/Expired assets breakdown
+    retired_hardware = db.query(
+        Asset.category, 
+        func.count(Asset.id).label('count')
+    ).filter(
+        Asset.organization_id == org_id,
+        Asset.asset_type == AssetType.HARDWARE,
+        Asset.status == AssetStatus.RETIRED,
+        Asset.category != None
+    ).group_by(Asset.category).order_by(func.count(Asset.id).desc()).all()
+    
+    expired_software = db.query(
+        Asset.subscription, 
+        func.count(Asset.id).label('count')
+    ).filter(
+        Asset.organization_id == org_id,
+        Asset.asset_type == AssetType.SOFTWARE,
+        Asset.status == AssetStatus.RETIRED,
+        Asset.subscription != None
+    ).group_by(Asset.subscription).order_by(func.count(Asset.id).desc()).all()
     
     return {
         "organization": {
@@ -389,6 +412,14 @@ def get_dashboard_stats(
                 "seats_used": int(seats_used) if seats_used else 0,
             }
             for name, count, seats_total, seats_used in software_stats
+        ],
+        "retired_hardware": [
+            {"category": cat, "count": count}
+            for cat, count in retired_hardware
+        ],
+        "expired_software": [
+            {"name": name, "count": count}
+            for name, count in expired_software
         ],
     }
 

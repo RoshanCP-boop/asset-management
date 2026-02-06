@@ -47,6 +47,8 @@ type DashboardData = {
     seats_total: number; 
     seats_used: number;
   }>;
+  retired_hardware: Array<{ category: string; count: number }>;
+  expired_software: Array<{ name: string; count: number }>;
 };
 
 type CurrentUser = {
@@ -511,6 +513,52 @@ export default function CompanyDashboardPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Retired & Expired Assets */}
+        {(data.retired_hardware.length > 0 || data.expired_software.length > 0) && (
+          <Card className="border-red-200 dark:border-red-900/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Retired & Expired
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Retired Hardware */}
+                {data.retired_hardware.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Retired Hardware</h4>
+                    <div className="space-y-1">
+                      {data.retired_hardware.map(({ category, count }) => (
+                        <div key={category} className="flex justify-between items-center bg-red-50 dark:bg-red-950/20 rounded px-3 py-1.5">
+                          <span className="text-sm text-red-700 dark:text-red-400">{category.replace(/_/g, " ")}</span>
+                          <span className="text-sm font-medium text-red-600 dark:text-red-500">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Expired Software */}
+                {data.expired_software.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Expired Subscriptions</h4>
+                    <div className="space-y-1">
+                      {data.expired_software.map(({ name, count }) => (
+                        <div key={name} className="flex justify-between items-center bg-red-50 dark:bg-red-950/20 rounded px-3 py-1.5">
+                          <span className="text-sm text-red-700 dark:text-red-400">{name}</span>
+                          <span className="text-sm font-medium text-red-600 dark:text-red-500">{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
