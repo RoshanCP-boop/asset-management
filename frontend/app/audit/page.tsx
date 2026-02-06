@@ -51,6 +51,12 @@ type CurrentUser = {
   email: string;
 };
 
+type Organization = {
+  id: number;
+  name: string;
+  logo_url: string | null;
+};
+
 type AuditSummary = {
   total_users: number;
   active_users: number;
@@ -106,8 +112,19 @@ function AuditContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Helper to get proper logo URL
+  const getLogoUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("/organization/") || url.startsWith("/api/")) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      return `${apiBase}${url}`;
+    }
+    return url;
+  };
 
   // Data state
   const [summary, setSummary] = useState<AuditSummary | null>(null);
@@ -280,9 +297,13 @@ function AuditContent() {
         return;
       }
 
-      // Load current user first to check permissions
-      const meData = await apiFetch<CurrentUser>("/auth/me", {}, token);
+      // Load current user and organization first
+      const [meData, orgData] = await Promise.all([
+        apiFetch<CurrentUser>("/auth/me", {}, token),
+        apiFetch<Organization>("/organization/current", {}, token).catch(() => null),
+      ]);
       setCurrentUser(meData);
+      setOrganization(orgData);
 
       // Only admin and auditor can access
       if (meData.role !== "ADMIN" && meData.role !== "AUDITOR") {
@@ -433,13 +454,21 @@ function AuditContent() {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <Link href="/assets" className="flex items-center gap-2 sm:gap-3 group min-w-0">
-                <img 
-                  src="/logo.png" 
-                  alt="ASTRA" 
-                  className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
-                />
+                {organization?.logo_url ? (
+                  <img 
+                    src={getLogoUrl(organization.logo_url) || "/logo.png"} 
+                    alt={organization.name || "ASTRA"} 
+                    className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0 rounded-lg bg-white dark:bg-gray-800 p-0.5"
+                  />
+                ) : (
+                  <img 
+                    src="/logo.png" 
+                    alt="ASTRA" 
+                    className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
+                  />
+                )}
                 <div className="min-w-0">
-                  <h1 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-[#f0f6fc]">ASTRA</h1>
+                  <h1 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-[#f0f6fc]">{organization?.name || "ASTRA"}</h1>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-[#96989d] hidden sm:block">Audit Dashboard</p>
                 </div>
               </Link>

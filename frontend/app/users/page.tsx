@@ -43,6 +43,12 @@ type CurrentUser = {
   organization_name?: string;
 };
 
+type Organization = {
+  id: number;
+  name: string;
+  logo_url: string | null;
+};
+
 type InviteCode = {
   id: number;
   code: string;
@@ -69,6 +75,7 @@ function UsersContent() {
   const searchParams = useSearchParams();
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,6 +83,16 @@ function UsersContent() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  
+  // Helper to get proper logo URL
+  const getLogoUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("/organization/") || url.startsWith("/api/")) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      return `${apiBase}${url}`;
+    }
+    return url;
+  };
   
   // Invite code state
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -209,13 +226,15 @@ function UsersContent() {
         return;
       }
 
-      const [usersData, meData] = await Promise.all([
+      const [usersData, meData, orgData] = await Promise.all([
         apiFetch<User[]>("/users", {}, token),
         apiFetch<CurrentUser>("/auth/me", {}, token),
+        apiFetch<Organization>("/organization/current", {}, token).catch(() => null),
       ]);
 
       setUsers(usersData);
       setCurrentUser(meData);
+      setOrganization(orgData);
     } catch (err: unknown) {
       // Redirect to login on auth errors (401 Unauthorized)
       if (err instanceof ApiError && err.status === 401) {
@@ -430,13 +449,21 @@ function UsersContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 sm:gap-3 group min-w-0">
-              <img 
-                src="/logo.png" 
-                alt="ASTRA" 
-                className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
-              />
+              {organization?.logo_url ? (
+                <img 
+                  src={getLogoUrl(organization.logo_url) || "/logo.png"} 
+                  alt={organization.name || "ASTRA"} 
+                  className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0 rounded-lg bg-white dark:bg-gray-800 p-0.5"
+                />
+              ) : (
+                <img 
+                  src="/logo.png" 
+                  alt="ASTRA" 
+                  className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
+                />
+              )}
               <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold text-gradient">ASTRA</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-gradient">{organization?.name || "ASTRA"}</h1>
                 <p className="text-xs text-slate-500 dark:text-[#96989d] hidden sm:block">User Management</p>
               </div>
             </div>
