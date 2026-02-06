@@ -47,6 +47,12 @@ type CurrentUser = {
   email: string;
 };
 
+type Organization = {
+  id: number;
+  name: string;
+  logo_url: string | null;
+};
+
 type AssetRequest = {
   id: number;
   request_type: string;
@@ -111,10 +117,21 @@ function AssetsContent() {
   const searchParams = useSearchParams();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  
+  // Helper to get proper logo URL
+  const getLogoUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("/organization/") || url.startsWith("/api/")) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      return `${apiBase}${url}`;
+    }
+    return url;
+  };
 
 
   // Role-based permissions
@@ -406,13 +423,15 @@ function AssetsContent() {
         return;
       }
 
-      const [assetsData, meData] = await Promise.all([
+      const [assetsData, meData, orgData] = await Promise.all([
         apiFetch<Asset[]>("/assets", {}, token),
         apiFetch<CurrentUser>("/auth/me", {}, token),
+        apiFetch<Organization>("/organization/current", {}, token).catch(() => null),
       ]);
       
       setAssets(assetsData);
       setCurrentUser(meData);
+      setOrganization(orgData);
 
       // Fetch pending user request count for admins
       if (meData.role === "ADMIN") {
@@ -541,6 +560,27 @@ function AssetsContent() {
     loadAssets();
   }, []);
 
+  // Update favicon when organization logo changes
+  useEffect(() => {
+    if (organization?.logo_url) {
+      const logoUrl = getLogoUrl(organization.logo_url);
+      if (logoUrl) {
+        // Update favicon
+        const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement || document.createElement('link');
+        link.type = 'image/x-icon';
+        link.rel = 'shortcut icon';
+        link.href = logoUrl;
+        document.head.appendChild(link);
+        
+        // Also update apple-touch-icon if it exists
+        const appleIcon = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement;
+        if (appleIcon) {
+          appleIcon.href = logoUrl;
+        }
+      }
+    }
+  }, [organization?.logo_url]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       {/* Backdrop for reminders dropdown - closes on click anywhere */}
@@ -564,13 +604,21 @@ function AssetsContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 sm:gap-3 group min-w-0">
-              <img 
-                src="/logo.png" 
-                alt="ASTRA" 
-                className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
-              />
+              {organization?.logo_url ? (
+                <img 
+                  src={getLogoUrl(organization.logo_url) || "/logo.png"} 
+                  alt={organization.name || "ASTRA"} 
+                  className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0 rounded-lg bg-white dark:bg-gray-800 p-0.5"
+                />
+              ) : (
+                <img 
+                  src="/logo.png" 
+                  alt="ASTRA" 
+                  className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
+                />
+              )}
               <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-bold text-gradient">ASTRA</h1>
+                <h1 className="text-lg sm:text-xl font-bold text-gradient">{organization?.name || "ASTRA"}</h1>
                 <p className="text-xs text-slate-500 dark:text-[#96989d] hidden sm:block">Asset Tracking, Simplified.</p>
               </div>
             </div>

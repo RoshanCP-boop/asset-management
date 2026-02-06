@@ -70,7 +70,7 @@ export default function CompanyDashboardPage() {
   // Get proper logo URL (handle relative API paths)
   const getLogoUrl = (url: string | null) => {
     if (!url) return null;
-    if (url.startsWith("/api/")) {
+    if (url.startsWith("/organization/") || url.startsWith("/api/")) {
       // It's a relative API path, prepend the API base URL
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       return `${apiBase}${url}`;

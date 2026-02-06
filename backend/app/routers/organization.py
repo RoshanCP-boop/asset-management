@@ -116,7 +116,7 @@ async def upload_logo(
     file_path = os.path.join(UPLOAD_DIR, new_filename)
     
     # Delete old logo file if exists
-    if org.logo_url and org.logo_url.startswith("/api/organization/logo/"):
+    if org.logo_url and "/organization/logo/" in org.logo_url:
         old_filename = org.logo_url.split("/")[-1]
         old_path = os.path.join(UPLOAD_DIR, old_filename)
         if os.path.exists(old_path):
@@ -129,8 +129,8 @@ async def upload_logo(
     with open(file_path, "wb") as f:
         f.write(content)
     
-    # Update organization with new logo URL
-    org.logo_url = f"/api/organization/logo/{new_filename}"
+    # Update organization with new logo URL (relative path without /api prefix)
+    org.logo_url = f"/organization/logo/{new_filename}"
     db.commit()
     db.refresh(org)
     
@@ -179,7 +179,7 @@ def delete_logo(
         raise HTTPException(404, "Organization not found")
     
     # Delete file if exists
-    if org.logo_url and org.logo_url.startswith("/api/organization/logo/"):
+    if org.logo_url and "/organization/logo/" in org.logo_url:
         old_filename = org.logo_url.split("/")[-1]
         old_path = os.path.join(UPLOAD_DIR, old_filename)
         if os.path.exists(old_path):
