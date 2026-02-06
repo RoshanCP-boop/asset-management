@@ -3,7 +3,7 @@ from sqlalchemy import select, func, case, or_
 
 from app import models, schemas
 from app.auth import hash_password
-from app.models import UserRole, User, Asset
+from app.models import UserRole, User, Asset, AssetType, AssetStatus
 
 
 # ---------- Locations ----------
@@ -160,9 +160,47 @@ def create_asset(db: Session, payload: schemas.AssetCreate, actor_user_id: int |
 
 
 
-def get_asset(db: Session, asset_id: int) -> models.Asset | None:
+def get_asset(db: Session, asset_id: int, auto_expire: bool = True) -> models.Asset | None:
     stmt = select(models.Asset).where(models.Asset.id == asset_id).options(joinedload(models.Asset.location))
-    return db.execute(stmt).scalar_one_or_none()
+    asset = db.execute(stmt).scalar_one_or_none()
+    
+    # Auto-expire if it's a software asset with past renewal date
+    if auto_expire and asset and asset.asset_type == AssetType.SOFTWARE:
+        from datetime import date
+        if asset.renewal_date and asset.renewal_date < date.today() and asset.status != AssetStatus.RETIRED:
+            asset.status = AssetStatus.RETIRED
+            db.commit()
+            db.refresh(asset)
+    
+    return asset
+
+
+def auto_expire_subscriptions(db: Session, organization_id: int | None = None) -> int:
+    """Auto-retire software subscriptions with past renewal dates. Returns count of updated assets."""
+    from datetime import date
+    
+    today = date.today()
+    
+    # Find all SOFTWARE assets with past renewal dates that aren't already RETIRED
+    query = db.query(Asset).filter(
+        Asset.asset_type == AssetType.SOFTWARE,
+        Asset.renewal_date != None,
+        Asset.renewal_date < today,
+        Asset.status != AssetStatus.RETIRED
+    )
+    
+    if organization_id:
+        query = query.filter(Asset.organization_id == organization_id)
+    
+    expired_assets = query.all()
+    
+    for asset in expired_assets:
+        asset.status = AssetStatus.RETIRED
+    
+    if expired_assets:
+        db.commit()
+    
+    return len(expired_assets)
 
 
 def list_assets(
@@ -172,6 +210,10 @@ def list_assets(
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Asset]:
+    # Auto-expire any subscriptions with past renewal dates
+    if current_user and current_user.organization_id:
+        auto_expire_subscriptions(db, current_user.organization_id)
+    
     stmt = select(Asset).order_by(Asset.id.desc())
 
     # Organization filtering - always filter by user's org
