@@ -60,11 +60,23 @@ export default function CompanyDashboardPage() {
   // Edit mode
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editPrefix, setEditPrefix] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === "ADMIN";
+  
+  // Get proper logo URL (handle relative API paths)
+  const getLogoUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("/api/")) {
+      // It's a relative API path, prepend the API base URL
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      return `${apiBase}${url}`;
+    }
+    return url;
+  };
 
   useEffect(() => {
     loadData();
@@ -84,7 +96,6 @@ export default function CompanyDashboardPage() {
       setData(dashboardData);
       setCurrentUser(userData);
       setEditName(dashboardData.organization.name);
-      setEditLogoUrl(dashboardData.organization.logo_url || "");
       setEditPrefix(dashboardData.organization.employee_id_prefix || "");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -101,7 +112,6 @@ export default function CompanyDashboardPage() {
         method: "PUT",
         body: JSON.stringify({
           name: editName,
-          logo_url: editLogoUrl || null,
           employee_id_prefix: editPrefix || null,
         }),
       }, token);
@@ -111,6 +121,67 @@ export default function CompanyDashboardPage() {
       setError(getErrorMessage(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadLogo(file: File) {
+    if (!token) return;
+    
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError("Invalid file type. Please use PNG, JPG, GIF, WebP, or SVG.");
+      return;
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("File too large. Maximum size is 5MB.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    setLogoError(null);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiBase}/organization/logo`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to upload logo");
+      }
+      
+      await loadData();
+    } catch (err) {
+      setLogoError(getErrorMessage(err));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function deleteLogo() {
+    if (!token) return;
+    
+    setUploadingLogo(true);
+    setLogoError(null);
+    
+    try {
+      await apiFetch("/organization/logo", { method: "DELETE" }, token);
+      await loadData();
+    } catch (err) {
+      setLogoError(getErrorMessage(err));
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -166,7 +237,7 @@ export default function CompanyDashboardPage() {
             <div className="flex items-center gap-3">
               {data.organization.logo_url ? (
                 <img 
-                  src={data.organization.logo_url} 
+                  src={getLogoUrl(data.organization.logo_url) || ""} 
                   alt="Company Logo" 
                   className="w-12 h-12 object-contain rounded-lg bg-white dark:bg-gray-800 p-1"
                 />
@@ -201,21 +272,76 @@ export default function CompanyDashboardPage() {
               <CardTitle>Organization Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
+              {/* Logo Upload Section */}
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Company Logo</label>
+                <div className="flex items-start gap-4">
+                  {/* Logo Preview */}
+                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center bg-slate-50 dark:bg-slate-900 overflow-hidden">
+                    {data?.organization.logo_url ? (
+                      <img 
+                        src={getLogoUrl(data.organization.logo_url) || ""} 
+                        alt="Logo" 
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-2xl font-bold text-slate-400">
+                        {data?.organization.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Upload Controls */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) uploadLogo(file);
+                            e.target.value = ""; // Reset input
+                          }}
+                          className="hidden"
+                          disabled={uploadingLogo}
+                        />
+                        <span className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          {uploadingLogo ? "Uploading..." : "Upload Logo"}
+                        </span>
+                      </label>
+                      {data?.organization.logo_url && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={deleteLogo}
+                          disabled={uploadingLogo}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Supported formats: PNG, JPG, GIF, WebP, SVG. Max 5MB.
+                    </p>
+                    {logoError && (
+                      <p className="text-xs text-red-500">{logoError}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Company Name</label>
                   <Input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     placeholder="Company Name"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Logo URL</label>
-                  <Input
-                    value={editLogoUrl}
-                    onChange={(e) => setEditLogoUrl(e.target.value)}
-                    placeholder="https://example.com/logo.png"
                   />
                 </div>
                 <div className="space-y-1">

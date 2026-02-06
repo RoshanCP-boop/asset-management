@@ -73,3 +73,6 @@ dmypy.json
 *.pem
 *.key
 credentials.json
+
+# Uploaded files
+app/uploads/

@@ -1,5 +1,8 @@
+import os
+import uuid
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select
 
@@ -9,6 +12,17 @@ from app.auth import require_roles, get_current_user
 from app.models import UserRole, User, Organization, Asset, AssetType, AssetStatus, AssetCondition
 
 router = APIRouter(prefix="/organization", tags=["organization"])
+
+# Allowed image file extensions and MIME types
+ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+ALLOWED_MIME_TYPES = {
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'
+}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+# Directory to store uploaded logos
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "logos")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.get("/current", response_model=schemas.OrganizationRead)
@@ -55,6 +69,129 @@ def update_organization(
     db.commit()
     db.refresh(org)
     return org
+
+
+@router.post("/logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload organization logo. Admin only."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(403, "Only admins can upload organization logo")
+    
+    if not current_user.organization_id:
+        raise HTTPException(404, "User is not part of an organization")
+    
+    org = db.get(Organization, current_user.organization_id)
+    if not org:
+        raise HTTPException(404, "Organization not found")
+    
+    # Validate file extension
+    if not file.filename:
+        raise HTTPException(400, "No filename provided")
+    
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            400, 
+            f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    
+    # Validate MIME type
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(400, f"Invalid content type: {file.content_type}")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Validate file size
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB")
+    
+    # Generate unique filename
+    unique_id = uuid.uuid4().hex[:12]
+    new_filename = f"org_{org.id}_{unique_id}{file_ext}"
+    file_path = os.path.join(UPLOAD_DIR, new_filename)
+    
+    # Delete old logo file if exists
+    if org.logo_url and org.logo_url.startswith("/api/organization/logo/"):
+        old_filename = org.logo_url.split("/")[-1]
+        old_path = os.path.join(UPLOAD_DIR, old_filename)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass  # Ignore deletion errors
+    
+    # Save the new file
+    with open(file_path, "wb") as f:
+        f.write(content)
+    
+    # Update organization with new logo URL
+    org.logo_url = f"/api/organization/logo/{new_filename}"
+    db.commit()
+    db.refresh(org)
+    
+    return {"logo_url": org.logo_url, "message": "Logo uploaded successfully"}
+
+
+@router.get("/logo/{filename}")
+async def get_logo(filename: str):
+    """Serve uploaded logo file."""
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Logo not found")
+    
+    # Determine media type from extension
+    ext = os.path.splitext(safe_filename)[1].lower()
+    media_types = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+    }
+    media_type = media_types.get(ext, 'application/octet-stream')
+    
+    return FileResponse(file_path, media_type=media_type)
+
+
+@router.delete("/logo")
+def delete_logo(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete organization logo. Admin only."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(403, "Only admins can delete organization logo")
+    
+    if not current_user.organization_id:
+        raise HTTPException(404, "User is not part of an organization")
+    
+    org = db.get(Organization, current_user.organization_id)
+    if not org:
+        raise HTTPException(404, "Organization not found")
+    
+    # Delete file if exists
+    if org.logo_url and org.logo_url.startswith("/api/organization/logo/"):
+        old_filename = org.logo_url.split("/")[-1]
+        old_path = os.path.join(UPLOAD_DIR, old_filename)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+    
+    org.logo_url = None
+    db.commit()
+    
+    return {"message": "Logo deleted successfully"}
 
 
 @router.get("/dashboard")
