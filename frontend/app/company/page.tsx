@@ -349,12 +349,13 @@ export default function CompanyDashboardPage() {
                   <Input
                     value={editPrefix}
                     onChange={(e) => setEditPrefix(e.target.value.toUpperCase())}
-                    placeholder="e.g., DOCK"
                     maxLength={10}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Employee IDs will be: {editPrefix || "XXX"}001, {editPrefix || "XXX"}002, etc.
-                  </p>
+                  {editPrefix && (
+                    <p className="text-xs text-muted-foreground">
+                      Employee IDs will be: {editPrefix}001, {editPrefix}002, etc.
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">

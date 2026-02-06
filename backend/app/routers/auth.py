@@ -366,8 +366,10 @@ def leave_organization(user: User = Depends(get_current_user), db: Session = Dep
     )
     
     # Clear google_id so they can re-register, deactivate, and remove from org
+    # Also clear employee_id since it's organization-specific
     user.google_id = None
     user.organization_id = None
+    user.employee_id = None
     user.is_active = False
     
     db.commit()
