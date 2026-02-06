@@ -38,6 +38,7 @@ type Asset = {
   warranty_start?: string | null;
   warranty_end?: string | null;
   renewal_date?: string | null;
+  needs_data_wipe?: boolean;
 };
 
 type CurrentUser = {
@@ -193,6 +194,7 @@ function AssetsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"" | "HARDWARE" | "SOFTWARE">("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterDataWipe, setFilterDataWipe] = useState(false);
 
   // Reminders dropdown state
   const [showReminders, setShowReminders] = useState(false);
@@ -354,9 +356,13 @@ function AssetsContent() {
           return false;
         }
       }
+      // Data wipe filter
+      if (filterDataWipe && !asset.needs_data_wipe) {
+        return false;
+      }
       return true;
     });
-  }, [assets, searchQuery, filterType, filterStatus]);
+  }, [assets, searchQuery, filterType, filterStatus, filterDataWipe]);
 
   // Sort filtered assets: Hardware first (sorted by category), then Software
   const sortedAssets = useMemo(() => {
@@ -379,7 +385,7 @@ function AssetsContent() {
   }, [filteredAssets]);
 
   // Reset page when filters change (but not until after page is restored)
-  const prevFilters = useRef({ searchQuery, filterType, filterStatus });
+  const prevFilters = useRef({ searchQuery, filterType, filterStatus, filterDataWipe });
   
   useEffect(() => {
     // Don't reset until page has been restored from sessionStorage
@@ -389,15 +395,16 @@ function AssetsContent() {
     const filtersChanged = 
       prevFilters.current.searchQuery !== searchQuery ||
       prevFilters.current.filterType !== filterType ||
-      prevFilters.current.filterStatus !== filterStatus;
+      prevFilters.current.filterStatus !== filterStatus ||
+      prevFilters.current.filterDataWipe !== filterDataWipe;
     
     if (filtersChanged) {
       setCurrentPage(1);
       sessionStorage.setItem("assetsPage", "1");
     }
     
-    prevFilters.current = { searchQuery, filterType, filterStatus };
-  }, [pageRestored, searchQuery, filterType, filterStatus]);
+    prevFilters.current = { searchQuery, filterType, filterStatus, filterDataWipe };
+  }, [pageRestored, searchQuery, filterType, filterStatus, filterDataWipe]);
 
   // Paginated assets
   const totalPages = Math.ceil(sortedAssets.length / itemsPerPage);
@@ -1243,7 +1250,18 @@ function AssetsContent() {
               <option value="IN_REPAIR" className="bg-white dark:bg-[#0a0a0a]">In Repair</option>
               <option value="RETIRED" className="bg-white dark:bg-[#0a0a0a]">Retired</option>
             </select>
-            {(searchQuery || filterType || filterStatus) && (
+            <Button
+              variant={filterDataWipe ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilterDataWipe(!filterDataWipe)}
+              className={filterDataWipe ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Needs Wipe {filterDataWipe && assets.filter(a => a.needs_data_wipe).length > 0 && `(${assets.filter(a => a.needs_data_wipe).length})`}
+            </Button>
+            {(searchQuery || filterType || filterStatus || filterDataWipe) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1251,6 +1269,7 @@ function AssetsContent() {
                   setSearchQuery("");
                   setFilterType("");
                   setFilterStatus("");
+                  setFilterDataWipe(false);
                 }}
               >
                 Clear Filters
