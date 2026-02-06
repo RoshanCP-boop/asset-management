@@ -472,7 +472,7 @@ function AuditContent() {
                   <img 
                     src={getLogoUrl(organization.logo_url) || "/logo.png"} 
                     alt={organization.name || "ASTRA"} 
-                    className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0 rounded-lg bg-white dark:bg-gray-800 p-0.5"
+                    className="w-10 h-10 sm:w-14 sm:h-14 object-contain transition-transform group-hover:scale-105 flex-shrink-0"
                   />
                 ) : (
                   <img 

@@ -239,7 +239,7 @@ export default function CompanyDashboardPage() {
                 <img 
                   src={getLogoUrl(data.organization.logo_url) || ""} 
                   alt="Company Logo" 
-                  className="w-12 h-12 object-contain rounded-lg bg-white dark:bg-gray-800 p-1"
+                  className="w-12 h-12 object-contain"
                 />
               ) : (
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
