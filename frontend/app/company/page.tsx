@@ -40,7 +40,13 @@ type DashboardData = {
     seats_total: number | null;
     seats_used: number | null;
   }>;
-  category_breakdown: Array<{ category: string; count: number }>;
+  hardware_categories: Array<{ category: string; count: number }>;
+  software_subscriptions: Array<{ 
+    name: string; 
+    count: number; 
+    seats_total: number; 
+    seats_used: number;
+  }>;
 };
 
 type CurrentUser = {
@@ -442,18 +448,67 @@ export default function CompanyDashboardPage() {
           </Card>
         </div>
 
-        {/* Category Breakdown */}
-        {data.category_breakdown.length > 0 && (
+        {/* Hardware by Category */}
+        {data.hardware_categories.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Assets by Category</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Hardware by Category
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {data.category_breakdown.map(({ category, count }) => (
+                {data.hardware_categories.map(({ category, count }) => (
                   <div key={category} className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3 text-center">
                     <div className="text-lg font-bold">{count}</div>
                     <div className="text-xs text-muted-foreground">{category.replace(/_/g, " ")}</div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Software Subscriptions */}
+        {data.software_subscriptions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Software & Subscriptions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {data.software_subscriptions.map(({ name, count, seats_total, seats_used }) => (
+                  <div key={name} className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-sm">{name}</div>
+                        <div className="text-xs text-muted-foreground">{count} license{count !== 1 ? 's' : ''}</div>
+                      </div>
+                      {seats_total > 0 && (
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{seats_used}/{seats_total}</div>
+                          <div className="text-xs text-muted-foreground">seats</div>
+                        </div>
+                      )}
+                    </div>
+                    {seats_total > 0 && (
+                      <div className="mt-2">
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
+                          <div 
+                            className={`h-1.5 rounded-full ${seats_used / seats_total > 0.9 ? 'bg-red-500' : seats_used / seats_total > 0.7 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                            style={{ width: `${Math.min((seats_used / seats_total) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

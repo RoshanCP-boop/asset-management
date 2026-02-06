@@ -63,8 +63,52 @@ def update_organization(
         org.name = payload.name
     if payload.logo_url is not None:
         org.logo_url = payload.logo_url if payload.logo_url else None
+    
+    # Handle employee ID prefix change
     if payload.employee_id_prefix is not None:
-        org.employee_id_prefix = payload.employee_id_prefix.upper() if payload.employee_id_prefix else None
+        old_prefix = org.employee_id_prefix
+        new_prefix = payload.employee_id_prefix.upper() if payload.employee_id_prefix else None
+        org.employee_id_prefix = new_prefix
+        
+        if new_prefix:
+            # Get all users in the organization
+            users = db.query(User).filter(User.organization_id == org.id).all()
+            
+            if old_prefix:
+                # Update existing employee IDs with new prefix
+                for user in users:
+                    if user.employee_id and user.employee_id.startswith(old_prefix):
+                        # Extract the number part and apply new prefix
+                        number_part = user.employee_id[len(old_prefix):]
+                        user.employee_id = f"{new_prefix}{number_part}"
+                    elif not user.employee_id:
+                        # User doesn't have an ID, assign one
+                        pass  # Will be handled below
+            
+            # Assign IDs to any users without one
+            users_without_id = [u for u in users if not u.employee_id]
+            if users_without_id:
+                # Find the max existing number
+                existing_nums = []
+                for user in users:
+                    if user.employee_id and user.employee_id.startswith(new_prefix):
+                        try:
+                            num = int(user.employee_id[len(new_prefix):])
+                            existing_nums.append(num)
+                        except ValueError:
+                            pass
+                
+                max_num = max(existing_nums) if existing_nums else 0
+                
+                # Assign sequential IDs
+                for user in users_without_id:
+                    max_num += 1
+                    user.employee_id = f"{new_prefix}{str(max_num).zfill(3)}"
+        else:
+            # Prefix was cleared - clear all employee IDs
+            users = db.query(User).filter(User.organization_id == org.id).all()
+            for user in users:
+                user.employee_id = None
     
     db.commit()
     db.refresh(org)
@@ -274,8 +318,8 @@ def get_dashboard_stats(
         Asset.renewal_date <= thirty_days
     ).all()
     
-    # Assets by category (top 10)
-    category_stats = db.query(
+    # Hardware assets by category (top 10)
+    hardware_category_stats = db.query(
         Asset.category, 
         func.count(Asset.id).label('count')
     ).filter(
@@ -283,6 +327,18 @@ def get_dashboard_stats(
         Asset.asset_type == AssetType.HARDWARE,
         Asset.category != None
     ).group_by(Asset.category).order_by(func.count(Asset.id).desc()).limit(10).all()
+    
+    # Software/subscriptions breakdown (by subscription name)
+    software_stats = db.query(
+        Asset.subscription, 
+        func.count(Asset.id).label('count'),
+        func.sum(Asset.seats_total).label('seats_total'),
+        func.sum(Asset.seats_used).label('seats_used')
+    ).filter(
+        Asset.organization_id == org_id,
+        Asset.asset_type == AssetType.SOFTWARE,
+        Asset.subscription != None
+    ).group_by(Asset.subscription).order_by(func.count(Asset.id).desc()).limit(10).all()
     
     return {
         "organization": {
@@ -321,9 +377,18 @@ def get_dashboard_stats(
             }
             for a in renewals_coming
         ],
-        "category_breakdown": [
+        "hardware_categories": [
             {"category": cat, "count": count}
-            for cat, count in category_stats
+            for cat, count in hardware_category_stats
+        ],
+        "software_subscriptions": [
+            {
+                "name": name,
+                "count": count,
+                "seats_total": int(seats_total) if seats_total else 0,
+                "seats_used": int(seats_used) if seats_used else 0,
+            }
+            for name, count, seats_total, seats_used in software_stats
         ],
     }
 
